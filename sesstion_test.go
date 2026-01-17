@@ -29,7 +29,7 @@ func TestSession_Run(t *testing.T) {
 	defer session.Destroy()
 
 	inputData := make([]float32, 3*640*640)
-	inputValue, err := engine.NewTensor([]int64{1, 3, 640, 640}, inputData)
+	inputValue, err := NewTensor([]int64{1, 3, 640, 640}, inputData)
 	if err != nil {
 		t.Fatal(err)
 	}

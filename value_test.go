@@ -7,7 +7,7 @@ import (
 func TestValue_GetShape(t *testing.T) {
 	engine, _ := NewEngine(DefaultLibraryPath())
 	defer engine.Destroy()
-	v, _ := engine.NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
+	v, _ := NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
 	defer v.Destroy()
 
 	shape, err := v.GetShape()
@@ -20,7 +20,7 @@ func TestValue_GetShape(t *testing.T) {
 func TestValue_GetElementCount(t *testing.T) {
 	engine, _ := NewEngine(DefaultLibraryPath())
 	defer engine.Destroy()
-	v, _ := engine.NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
+	v, _ := NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
 	defer v.Destroy()
 
 	shape, err := v.GetElementCount()
@@ -33,7 +33,7 @@ func TestValue_GetElementCount(t *testing.T) {
 func TestGetTensorData(t *testing.T) {
 	engine, _ := NewEngine(DefaultLibraryPath())
 	defer engine.Destroy()
-	v, _ := engine.NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
+	v, _ := NewTensor([]int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
 	defer v.Destroy()
 
 	data, err := GetTensorData[float32](v)

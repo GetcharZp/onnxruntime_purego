@@ -199,7 +199,7 @@ func preprocess(engine *ort.Engine, img image.Image, inputSize int) (*ort.Value,
 		}
 	}
 
-	tensor, err := engine.NewTensor([]int64{1, 3, 640, 640}, data)
+	tensor, err := ort.NewTensor([]int64{1, 3, 640, 640}, data)
 	if err != nil {
 		return nil, params, fmt.Errorf("创建 Tensor 失败: %w", err)
 	}

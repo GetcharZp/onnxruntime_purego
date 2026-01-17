@@ -19,8 +19,12 @@ type Value struct {
 //
 //	shape: 形状
 //	data: 数据
-func (e *Engine) NewTensor(shape []int64, data any) (*Value, error) {
-	dataType, typeSize, dataLen, dataPtr, err := e.parseInputData(data)
+func NewTensor(shape []int64, data any) (*Value, error) {
+	if defaultEngine == nil {
+		return nil, fmt.Errorf("engine not initialized")
+	}
+
+	dataType, typeSize, dataLen, dataPtr, err := parseInputData(data)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +36,8 @@ func (e *Engine) NewTensor(shape []int64, data any) (*Value, error) {
 		shapePtr = &shape[0]
 	}
 
-	status := e.funcs.createTensorWithDataAsOrtValue(
-		e.memInfo,
+	status := defaultEngine.funcs.createTensorWithDataAsOrtValue(
+		defaultEngine.memInfo,
 		dataPtr,
 		uintptr(dataLen)*typeSize,
 		shapePtr,
@@ -41,11 +45,11 @@ func (e *Engine) NewTensor(shape []int64, data any) (*Value, error) {
 		dataType,
 		&valHandle,
 	)
-	if err := e.checkStatus(status); err != nil {
+	if err := defaultEngine.checkStatus(status); err != nil {
 		return nil, err
 	}
 
-	return &Value{handle: valHandle, engine: e}, nil
+	return &Value{handle: valHandle, engine: defaultEngine}, nil
 }
 
 // GetShape 获取 Tensor 的维度信息
@@ -182,7 +186,7 @@ func (v *Value) getTypeAndShapeInfo() (TensorTypeAndShapeInfoHandle, error) {
 //	int: 数据长度
 //	unsafe.Pointer: 数据指针
 //	error: 错误信息
-func (e *Engine) parseInputData(data any) (TensorElementDataType, uintptr, int, unsafe.Pointer, error) {
+func parseInputData(data any) (TensorElementDataType, uintptr, int, unsafe.Pointer, error) {
 	switch d := data.(type) {
 	case []float32:
 		return TensorElementDataTypeFloat, 4, len(d), unsafe.Pointer(&d[0]), nil

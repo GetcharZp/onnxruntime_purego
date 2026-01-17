@@ -20,6 +20,8 @@ const (
 	DefaultEnvName = "GETCHARZP"
 )
 
+var defaultEngine *Engine
+
 // Engine 推理引擎上下文
 type Engine struct {
 	handle  uintptr
@@ -53,6 +55,8 @@ func NewEngine(libPath string) (*Engine, error) {
 	if err := e.initMemInfo(); err != nil {
 		return nil, err
 	}
+
+	defaultEngine = e
 
 	return e, nil
 }
