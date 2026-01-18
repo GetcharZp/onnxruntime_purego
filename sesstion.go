@@ -31,6 +31,30 @@ func (o *SessionOptions) SetIntraOpNumThreads(num int32) error {
 	return o.engine.checkStatus(o.engine.funcs.setIntraOpNumThreads(o.handle, num))
 }
 
+// SetCpuMemArena 设置内存池策略
+//
+//	false: 禁用内存池，推理速度稍慢，但 Destroy 后立即归还内存给 OS ，解决内存滞留问题
+//	true: 启用内存池，推理速度最快，但 Destroy 后内存会被缓存以供复用（默认）
+func (o *SessionOptions) SetCpuMemArena(useArena bool) error {
+	if useArena {
+		return o.engine.checkStatus(o.engine.funcs.enableCpuMemArena(o.handle))
+	}
+	return o.engine.checkStatus(o.engine.funcs.disableCpuMemArena(o.handle))
+}
+
+// EnableCUDA 启用 CUDA
+func (o *SessionOptions) EnableCUDA() error {
+	var cudaOpts CUDAProviderOptionsV2Handle
+	status := o.engine.funcs.createCUDAProviderOptions(&cudaOpts)
+	if err := o.engine.checkStatus(status); err != nil {
+		return fmt.Errorf("failed to create CUDA provider options: %w", err)
+	}
+	defer o.engine.funcs.releaseCUDAProviderOptions(cudaOpts)
+
+	status = o.engine.funcs.appendExecutionProvider_CUDA_V2(o.handle, cudaOpts)
+	return o.engine.checkStatus(status)
+}
+
 func (o *SessionOptions) Destroy() {
 	if o.handle != 0 {
 		o.engine.funcs.releaseSessionOptions(o.handle)

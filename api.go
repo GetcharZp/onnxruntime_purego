@@ -404,13 +404,13 @@ type (
 	TensorTypeAndShapeInfoHandle uintptr
 	RunOptionsHandle             uintptr
 	TypeInfoHandle               uintptr
+	CUDAProviderOptionsV2Handle  uintptr
 	ErrorCode                    int32
-	// LoggingLevel ORT 的日志级别
-	LoggingLevel          int32
-	OnnxType              int32
-	TensorElementDataType int32
-	AllocatorType         int32
-	MemType               int32
+	LoggingLevel                 int32
+	OnnxType                     int32
+	TensorElementDataType        int32
+	AllocatorType                int32
+	MemType                      int32
 )
 
 const (
@@ -469,11 +469,19 @@ type apiFuncs struct {
 	createCpuMemoryInfo func(AllocatorType, MemType, *MemoryInfoHandle) StatusHandle
 	releaseMemoryInfo   func(MemoryInfoHandle)
 
+	// CUDA
+	createCUDAProviderOptions       func(*CUDAProviderOptionsV2Handle) StatusHandle
+	updateCUDAProviderOptions       func(CUDAProviderOptionsV2Handle, **byte, **byte, uintptr) StatusHandle
+	releaseCUDAProviderOptions      func(CUDAProviderOptionsV2Handle)
+	appendExecutionProvider_CUDA_V2 func(SessionOptionsHandle, CUDAProviderOptionsV2Handle) StatusHandle
+
 	// session options
 	createSessionOptions                  func(*SessionOptionsHandle) StatusHandle
 	setIntraOpNumThreads                  func(SessionOptionsHandle, int32) StatusHandle
 	sessionOptionsAppendExecutionProvider func(SessionOptionsHandle, *byte, **byte, **byte, uintptr) StatusHandle
 	releaseSessionOptions                 func(SessionOptionsHandle)
+	enableCpuMemArena                     func(SessionOptionsHandle) StatusHandle
+	disableCpuMemArena                    func(SessionOptionsHandle) StatusHandle
 
 	// session
 	createSession          func(EnvHandle, unsafe.Pointer, SessionOptionsHandle, *SessionHandle) StatusHandle

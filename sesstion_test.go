@@ -9,7 +9,14 @@ const testModelPath = "./testdata/yolo11n.onnx"
 func TestEngine_NewSession(t *testing.T) {
 	engine, _ := NewEngine(DefaultLibraryPath())
 	defer engine.Destroy()
-	session, err := engine.NewSession(testModelPath, nil)
+	option, _ := engine.NewSessionOptions()
+	if err := option.SetIntraOpNumThreads(1); err != nil {
+		t.Fatal(err)
+	}
+	if err := option.SetCpuMemArena(true); err != nil {
+		t.Fatal(err)
+	}
+	session, err := engine.NewSession(testModelPath, option)
 	if err != nil {
 		t.Fatal(err)
 	}

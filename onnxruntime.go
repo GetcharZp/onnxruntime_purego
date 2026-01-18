@@ -98,11 +98,19 @@ func (e *Engine) initApi() error {
 	purego.RegisterFunc(&e.funcs.createCpuMemoryInfo, e.api.CreateCpuMemoryInfo)
 	purego.RegisterFunc(&e.funcs.releaseMemoryInfo, e.api.ReleaseMemoryInfo)
 
+	// CUDA
+	purego.RegisterFunc(&e.funcs.createCUDAProviderOptions, e.api.CreateCUDAProviderOptions)
+	purego.RegisterFunc(&e.funcs.releaseCUDAProviderOptions, e.api.ReleaseCUDAProviderOptions)
+	purego.RegisterFunc(&e.funcs.updateCUDAProviderOptions, e.api.UpdateCUDAProviderOptions)
+	purego.RegisterFunc(&e.funcs.appendExecutionProvider_CUDA_V2, e.api.SessionOptionsAppendExecutionProvider_CUDA_V2)
+
 	// session options
 	purego.RegisterFunc(&e.funcs.createSessionOptions, e.api.CreateSessionOptions)
 	purego.RegisterFunc(&e.funcs.setIntraOpNumThreads, e.api.SetIntraOpNumThreads)
 	purego.RegisterFunc(&e.funcs.sessionOptionsAppendExecutionProvider, e.api.SessionOptionsAppendExecutionProvider)
 	purego.RegisterFunc(&e.funcs.releaseSessionOptions, e.api.ReleaseSessionOptions)
+	purego.RegisterFunc(&e.funcs.enableCpuMemArena, e.api.EnableCpuMemArena)
+	purego.RegisterFunc(&e.funcs.disableCpuMemArena, e.api.DisableCpuMemArena)
 
 	// session
 	purego.RegisterFunc(&e.funcs.createSession, e.api.CreateSession)
@@ -138,7 +146,7 @@ func (e *Engine) initEnv(name string) error {
 	if err != nil {
 		return err
 	}
-	status := e.funcs.createEnv(LogWarning, namePtr, &e.envHandle)
+	status := e.funcs.createEnv(LogError, namePtr, &e.envHandle)
 	if err := e.checkStatus(status); err != nil {
 		return fmt.Errorf("failed to create env: %w", err)
 	}
