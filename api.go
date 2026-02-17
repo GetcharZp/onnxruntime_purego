@@ -390,6 +390,31 @@ type ortApi struct {
 	Graph_GetModelMetadata                              uintptr // 379
 	GetModelCompatibilityForEpDevices                   uintptr // 380
 	CreateExternalInitializerInfo                       uintptr // 381
+	KernelInfo_GetConfigEntries                         uintptr // 382
+	KernelInfo_GetOperatorDomain                        uintptr // 383
+	KernelInfo_GetOperatorType                          uintptr // 384
+	KernelInfo_GetOperatorSinceVersion                  uintptr // 385
+	GetInteropApi                                       uintptr // 386
+	SessionGetEpDeviceForOutputs                        uintptr // 387
+	GetNumHardwareDevices                               uintptr // 388
+	GetHardwareDevices                                  uintptr // 389
+	GetHardwareDeviceEpIncompatibilityDetails           uintptr // 390
+	DeviceEpIncompatibilityDetails_GetReasonsBitmask    uintptr // 391
+	DeviceEpIncompatibilityDetails_GetNotes             uintptr // 392
+	DeviceEpIncompatibilityDetails_GetErrorCode         uintptr // 393
+	ReleaseDeviceEpIncompatibilityDetails               uintptr // 394
+	GetCompatibilityInfoFromModel                       uintptr // 395
+	GetCompatibilityInfoFromModelBytes                  uintptr // 396
+	CreateEnvWithOptions                                uintptr // 397
+	Session_GetEpGraphAssignmentInfo                    uintptr // 398
+	EpAssignedSubgraph_GetEpName                        uintptr // 399
+	EpAssignedSubgraph_GetNodes                         uintptr // 400
+	EpAssignedNode_GetName                              uintptr // 401
+	EpAssignedNode_GetDomain                            uintptr // 402
+	EpAssignedNode_GetOperatorType                      uintptr // 403
+	GetTensorElementTypeAndShapeDataReference           uintptr // 404
+	RunOptionsEnableProfiling                           uintptr // 405
+	RunOptionsDisableProfiling                          uintptr // 406
 }
 
 // OrtStatus is an opaque pointer to an ONNX Runtime status object.
