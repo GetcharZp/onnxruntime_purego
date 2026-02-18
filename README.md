@@ -19,10 +19,20 @@
 
 ## 安装
 
-下载 [onnxruntime1.24](https://github.com/microsoft/onnxruntime/releases/tag/v1.24.1) 动态链接库，安装 `onnxruntime_purego` 库。
+下载 [onnxruntime 1.24](https://github.com/microsoft/onnxruntime/releases/tag/v1.24.1) 动态链接库，安装 `onnxruntime_purego` 库，版本对应关系：
+
+| onnxruntime | onnxruntime_purego |
+|-------------|--------------------|
+| 1.24        | v1.24.0            |
+| 1.23        | v1.23.0            |
+
 
 ```shell
+# 下载最新版本
 go get -u github.com/getcharzp/onnxruntime_purego
+
+# 针对 onnxruntime 1.24 下载特定版本 purego
+go get -u github.com/getcharzp/onnxruntime_purego@v1.24
 ```
 
 ## 快速开始
