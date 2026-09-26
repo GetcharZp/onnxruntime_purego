@@ -15,16 +15,15 @@
 </p>
 
 <p align="center">
-  English | <a href="./README_zh.md">简体中文</a>
+  <a href="./README.md">English</a> | 简体中文
 </p>
 
-A CGO-free, pure Go project built on top of `purego`. It binds directly to and calls the native onnxruntime
-library interfaces through `purego`, so ONNX models can be loaded and inferred without a CGO build environment.
-It is implemented based on the `onnxruntime` 1.24.1 headers.
+基于 `purego` 实现的无 CGO 纯 Go 项目，通过 `purego` 直接绑定并调用 onnxruntime 原生库接口，无需依赖 CGO 编译环境，
+即可实现 ONNX 模型的加载与推理计算，基于 `onnxruntime` 1.24.1 的头文件实现。
 
-## Installation
+## 安装
 
-Download the [onnxruntime 1.24](https://github.com/microsoft/onnxruntime/releases/tag/v1.24.1) dynamic library and install the `onnxruntime_purego` package. Version compatibility:
+下载 [onnxruntime 1.24](https://github.com/microsoft/onnxruntime/releases/tag/v1.24.1) 动态链接库，安装 `onnxruntime_purego` 库，版本对应关系：
 
 | onnxruntime | onnxruntime_purego |
 |-------------|--------------------|
@@ -33,14 +32,14 @@ Download the [onnxruntime 1.24](https://github.com/microsoft/onnxruntime/release
 
 
 ```shell
-# Download the latest version
+# 下载最新版本
 go get -u github.com/getcharzp/onnxruntime_purego
 
-# Download the specific release for onnxruntime 1.24
+# 针对 onnxruntime 1.24 下载特定版本 purego
 go get -u github.com/getcharzp/onnxruntime_purego@v1.24
 ```
 
-## Quick Start
+## 快速开始
 
 ```go
 package main
@@ -87,11 +86,10 @@ func main() {
 }
 ```
 
-## Examples
+## 案例
 
-### YOLOv11 Object Detection
+### YOLOv11 目标检测
 
-| Original Image                                      | Detection Result                                            |
+| 原图                                                  | Mask图                                                      |
 |-----------------------------------------------------|------------------------------------------------------------|
 | <img width="100%" src="./testdata/test.png" alt=""> | <img width="100%" src="./testdata/yolov11_det.png" alt=""> |
-
