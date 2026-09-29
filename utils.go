@@ -39,6 +39,16 @@ func DefaultLibraryPath() string {
 	return fmt.Sprintf("%s%s_%s.%s", baseDir, libName, runtime.GOARCH, ext)
 }
 
+// slicePtr 返回切片首元素的地址
+//
+// 空切片返回 nil —— 直接写 &s[0] 会 panic，而 C API 允许把 nil 与长度 0 一起传入。
+func slicePtr[T any](s []T) *T {
+	if len(s) == 0 {
+		return nil
+	}
+	return &s[0]
+}
+
 // stringToCString 将字符串转换为字节指针
 func stringToCString(s string) (*byte, error) {
 	b := make([]byte, len(s)+1)

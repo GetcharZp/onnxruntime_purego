@@ -2,6 +2,8 @@ package ort
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/ebitengine/purego"
 	"github.com/getcharzp/onnxruntime_purego/internal/sys"
 )
@@ -20,7 +22,24 @@ const (
 	DefaultEnvName = "GETCHARZP"
 )
 
-var defaultEngine *Engine
+// defaultEngine 由 NewEngine 设置，供包级 NewTensor 使用。
+var (
+	defaultEngineMu sync.RWMutex
+	defaultEngine   *Engine
+)
+
+// getDefaultEngine 获取全局默认引擎
+func getDefaultEngine() *Engine {
+	defaultEngineMu.RLock()
+	defer defaultEngineMu.RUnlock()
+	return defaultEngine
+}
+
+func setDefaultEngine(e *Engine) {
+	defaultEngineMu.Lock()
+	defer defaultEngineMu.Unlock()
+	defaultEngine = e
+}
 
 // Engine 推理引擎上下文
 type Engine struct {
@@ -47,16 +66,21 @@ func NewEngine(libPath string) (*Engine, error) {
 	}
 
 	if err := e.initApi(); err != nil {
+		sys.FreeLibrary(handle)
 		return nil, err
 	}
 	if err := e.initEnv(DefaultEnvName); err != nil {
+		e.cleanup()
+		sys.FreeLibrary(handle)
 		return nil, err
 	}
 	if err := e.initMemInfo(); err != nil {
+		e.cleanup()
+		sys.FreeLibrary(handle)
 		return nil, err
 	}
 
-	defaultEngine = e
+	setDefaultEngine(e)
 
 	return e, nil
 }
@@ -171,8 +195,8 @@ func (e *Engine) GetVersion() string {
 	return e.funcs.getVersionString()
 }
 
-// Destroy 释放资源
-func (e *Engine) Destroy() {
+// cleanup 释放 env / memory info，可重复调用
+func (e *Engine) cleanup() {
 	if e.memInfo != 0 {
 		e.funcs.releaseMemoryInfo(e.memInfo)
 		e.memInfo = 0
@@ -181,6 +205,29 @@ func (e *Engine) Destroy() {
 		e.funcs.releaseEnv(e.envHandle)
 		e.envHandle = 0
 	}
+}
+
+// Destroy 释放资源
+//
+// 调用顺序：session 由 env 创建并引用 env，必须先释放所有 Session（及由它们产出的 Value），
+// 再调用本方法。例如：
+//
+//	engine, _ := ort.NewEngine(ort.DefaultLibraryPath())
+//	defer engine.Destroy() // 最先 defer，最后执行
+//	session, _ := engine.NewSession("model.onnx", nil)
+//	defer session.Destroy()
+//
+// Destroy 之后包级 NewTensor 会返回 "engine not initialized"，不会再访问已释放的句柄。
+func (e *Engine) Destroy() {
+	e.cleanup()
+
+	// 避免 defaultEngine 悬垂：否则后续 NewTensor 会把已释放的 MemoryInfoHandle 交给 ORT
+	defaultEngineMu.Lock()
+	if defaultEngine == e {
+		defaultEngine = nil
+	}
+	defaultEngineMu.Unlock()
+
 	e.handle = 0
 }
 

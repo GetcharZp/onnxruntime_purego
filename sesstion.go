@@ -189,15 +189,24 @@ func (s *Session) Destroy() {
 }
 
 // Run 执行推理
+//
+// inputs 的 key 为输入名（见 Session.InputNames），返回的 Value 由调用方负责 Destroy。
 func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
 	inputCount := len(inputs)
 	outputCount := len(s.OutputNames)
+
+	if inputCount == 0 {
+		return nil, fmt.Errorf("session.Run: no inputs provided, expect %v", s.InputNames)
+	}
 
 	// input
 	inputNamePtrs := make([]unsafe.Pointer, inputCount)
 	inputHandles := make([]ValueHandle, inputCount)
 	i := 0
 	for name, val := range inputs {
+		if val == nil {
+			return nil, fmt.Errorf("session.Run: input %q is nil", name)
+		}
 		cName, err := stringToCString(name)
 		if err != nil {
 			return nil, err
@@ -222,12 +231,12 @@ func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
 	status := s.engine.funcs.run(
 		s.handle,
 		0,
-		&inputNamePtrs[0],
-		&inputHandles[0],
+		slicePtr(inputNamePtrs),
+		slicePtr(inputHandles),
 		uintptr(inputCount),
-		&outputNamePtrs[0],
+		slicePtr(outputNamePtrs),
 		uintptr(outputCount),
-		&outputHandles[0],
+		slicePtr(outputHandles),
 	)
 
 	if err := s.engine.checkStatus(status); err != nil {
