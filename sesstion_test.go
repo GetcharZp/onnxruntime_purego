@@ -47,6 +47,10 @@ func TestEngine_NewSession(t *testing.T) {
 	defer session.Destroy()
 
 	testutil.NotEqual(t, session.handle, SessionHandle(0))
+	testutil.Equal(t, session.Inputs[0].Name, testInputName)
+	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
+
+	// 弃用字段需保持可用，直至正式移除
 	testutil.Equal(t, session.InputNames, []string{testInputName})
 	testutil.Equal(t, session.OutputNames, []string{testOutputName})
 }
@@ -58,8 +62,28 @@ func TestEngine_NewSession_WithoutOptions(t *testing.T) {
 	testutil.Equal(t, err, nil)
 	defer session.Destroy()
 
-	testutil.Equal(t, session.InputNames, []string{testInputName})
-	testutil.Equal(t, session.OutputNames, []string{testOutputName})
+	testutil.Equal(t, session.Inputs[0].Name, testInputName)
+	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
+}
+
+// TestEngine_NewSession_TypeInfo 校验从模型读到的输入/输出类型与形状
+func TestEngine_NewSession_TypeInfo(t *testing.T) {
+	session := newTestSession(t, nil)
+
+	testutil.Equal(t, len(session.Inputs), 1)
+	testutil.Equal(t, session.Inputs[0].Name, testInputName)
+	testutil.Equal(t, session.Inputs[0].DataType, TensorElementDataTypeFloat)
+	testutil.Equal(t, session.Inputs[0].Shape, []int64{1, testChannels, testHeight, testWidth})
+
+	testutil.Equal(t, len(session.Outputs), 1)
+	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
+	testutil.Equal(t, session.Outputs[0].DataType, TensorElementDataTypeFloat)
+	testutil.Equal(t, session.Outputs[0].Shape, []int64{1, testRows, testAnchors})
+
+	// Shape 固定时可直接算出缓冲区长度
+	count, ok := session.Inputs[0].ElementCount()
+	testutil.Equal(t, ok, true)
+	testutil.Equal(t, count, int64(testChannels*testHeight*testWidth))
 }
 
 func TestEngine_NewSession_ModelNotFound(t *testing.T) {

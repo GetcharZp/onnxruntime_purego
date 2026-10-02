@@ -5,10 +5,32 @@ import (
 	"unsafe"
 )
 
+type TensorInfo struct {
+	Name     string
+	DataType TensorElementDataType
+	Shape    []int64
+}
+
+// ElementCount 返回 Shape 各维度的乘积，便于按形状直接准备输入缓冲区。
+//
+// # Returns:
+//
+//	int64: 元素总数
+//	bool: 是否成功计算出元素总数
+func (t TensorInfo) ElementCount() (int64, bool) {
+	return shapeElementCount(t.Shape)
+}
+
 type Session struct {
-	handle      SessionHandle
-	engine      *Engine
-	InputNames  []string
+	handle  SessionHandle
+	engine  *Engine
+	Inputs  []TensorInfo
+	Outputs []TensorInfo
+
+	// Deprecated: 改用 Inputs[i].Name
+	InputNames []string
+
+	// Deprecated: 改用 Outputs[i].Name
 	OutputNames []string
 }
 
@@ -99,86 +121,106 @@ func (e *Engine) NewSession(modelPath string, opts *SessionOptions) (*Session, e
 }
 
 func (s *Session) initMetadata() error {
-	// input
-	inputCount, err := s.getInputCount()
-	if err != nil {
+	var err error
+	if s.Inputs, err = s.collectMetadata(true); err != nil {
 		return err
 	}
-	s.InputNames = make([]string, inputCount)
-	for i := 0; i < inputCount; i++ {
-		name, err := s.getInputName(i)
-		if err != nil {
-			return err
-		}
-		s.InputNames[i] = name
-	}
-
-	// output
-	outputCount, err := s.getOutputCount()
-	if err != nil {
+	if s.Outputs, err = s.collectMetadata(false); err != nil {
 		return err
 	}
-	s.OutputNames = make([]string, outputCount)
-	for i := 0; i < outputCount; i++ {
-		name, err := s.getOutputName(i)
-		if err != nil {
-			return err
-		}
-		s.OutputNames[i] = name
-	}
 
+	// 兼容已弃用字段，不额外产生 onnxruntime 调用
+	s.InputNames, s.OutputNames = tensorNames(s.Inputs), tensorNames(s.Outputs)
 	return nil
 }
 
-func (s *Session) getInputCount() (int, error) {
-	var count uintptr
-	status := s.engine.funcs.sessionGetInputCount(s.handle, &count)
-	return int(count), s.engine.checkStatus(status)
+// tensorNames 提取元信息中的名字
+func tensorNames(infos []TensorInfo) []string {
+	names := make([]string, len(infos))
+	for i, info := range infos {
+		names[i] = info.Name
+	}
+	return names
 }
 
-func (s *Session) getOutputCount() (int, error) {
-	var count uintptr
-	status := s.engine.funcs.sessionGetOutputCount(s.handle, &count)
-	return int(count), s.engine.checkStatus(status)
-}
+// collectMetadata 收集模型数据
+//
+// # Params:
+//
+//	isInput: true 表示收集输入元信息，false 表示收集输出元信息
+func (s *Session) collectMetadata(isInput bool) ([]TensorInfo, error) {
+	f := s.engine.funcs
+	count, name, typeInfo := f.sessionGetInputCount, f.sessionGetInputName, f.sessionGetInputTypeInfo
+	if !isInput {
+		count, name, typeInfo = f.sessionGetOutputCount, f.sessionGetOutputName, f.sessionGetOutputTypeInfo
+	}
 
-func (s *Session) getInputName(index int) (string, error) {
+	var n uintptr
+	if err := s.engine.checkStatus(count(s.handle, &n)); err != nil {
+		return nil, err
+	}
+
+	// 所有条目共用默认分配器，取一次即可
 	var allocator AllocatorHandle
-	status := s.engine.funcs.getAllocatorWithDefaultOptions(&allocator)
-	if err := s.engine.checkStatus(status); err != nil {
-		return "", err
+	if err := s.engine.checkStatus(f.getAllocatorWithDefaultOptions(&allocator)); err != nil {
+		return nil, err
 	}
 
-	var namePtr *byte
-	status = s.engine.funcs.sessionGetInputName(s.handle, uintptr(index), allocator, &namePtr)
-	if err := s.engine.checkStatus(status); err != nil {
-		return "", err
+	infos := make([]TensorInfo, n)
+	for i := range infos {
+		var namePtr *byte
+		if err := s.engine.checkStatus(name(s.handle, uintptr(i), allocator, &namePtr)); err != nil {
+			return nil, err
+		}
+		infos[i].Name = cStringToString(namePtr)
+		f.allocatorFree(allocator, unsafe.Pointer(namePtr))
+
+		var ti TypeInfoHandle
+		if err := s.engine.checkStatus(typeInfo(s.handle, uintptr(i), &ti)); err != nil {
+			return nil, err
+		}
+		dataType, shape, err := s.readTensorType(ti)
+		f.releaseTypeInfo(ti)
+		if err != nil {
+			return nil, err
+		}
+		infos[i].DataType, infos[i].Shape = dataType, shape
 	}
 
-	name := cStringToString(namePtr)
-	// 释放内存
-	s.engine.funcs.allocatorFree(allocator, unsafe.Pointer(namePtr))
-
-	return name, nil
+	return infos, nil
 }
 
-func (s *Session) getOutputName(index int) (string, error) {
-	var allocator AllocatorHandle
-	status := s.engine.funcs.getAllocatorWithDefaultOptions(&allocator)
-	if err := s.engine.checkStatus(status); err != nil {
-		return "", err
+// readTensorType 从 OrtTypeInfo 解析出元素类型与形状
+func (s *Session) readTensorType(ti TypeInfoHandle) (TensorElementDataType, []int64, error) {
+	f := s.engine.funcs
+
+	var info TensorTypeAndShapeInfoHandle
+	if err := s.engine.checkStatus(f.castTypeInfoToTensorInfo(ti, &info)); err != nil {
+		return TensorElementDataTypeUndefined, nil, err
 	}
 
-	var namePtr *byte
-	status = s.engine.funcs.sessionGetOutputName(s.handle, uintptr(index), allocator, &namePtr)
-	if err := s.engine.checkStatus(status); err != nil {
-		return "", err
+	if info == 0 {
+		return TensorElementDataTypeUndefined, nil, nil
 	}
 
-	name := cStringToString(namePtr)
-	s.engine.funcs.allocatorFree(allocator, unsafe.Pointer(namePtr))
+	var dataType TensorElementDataType
+	if err := s.engine.checkStatus(f.getTensorElementType(info, &dataType)); err != nil {
+		return TensorElementDataTypeUndefined, nil, err
+	}
 
-	return name, nil
+	var dimCount uintptr
+	if err := s.engine.checkStatus(f.getDimensionsCount(info, &dimCount)); err != nil {
+		return TensorElementDataTypeUndefined, nil, err
+	}
+
+	shape := make([]int64, dimCount)
+	if dimCount > 0 {
+		if err := s.engine.checkStatus(f.getDimensions(info, &shape[0], dimCount)); err != nil {
+			return TensorElementDataTypeUndefined, nil, err
+		}
+	}
+
+	return dataType, shape, nil
 }
 
 func (s *Session) Destroy() {
@@ -190,13 +232,13 @@ func (s *Session) Destroy() {
 
 // Run 执行推理
 //
-// inputs 的 key 为输入名（见 Session.InputNames），返回的 Value 由调用方负责 Destroy。
+// inputs 的 key 为输入名（见 Session.Inputs），返回的 Value 由调用方负责 Destroy。
 func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
 	inputCount := len(inputs)
-	outputCount := len(s.OutputNames)
+	outputCount := len(s.Outputs)
 
 	if inputCount == 0 {
-		return nil, fmt.Errorf("session.Run: no inputs provided, expect %v", s.InputNames)
+		return nil, fmt.Errorf("session.Run: no inputs provided, expect %v", tensorNames(s.Inputs))
 	}
 
 	// input
@@ -219,8 +261,8 @@ func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
 	// output
 	outputNamePtrs := make([]unsafe.Pointer, outputCount)
 	outputHandles := make([]ValueHandle, outputCount)
-	for i, name := range s.OutputNames {
-		cName, err := stringToCString(name)
+	for i, out := range s.Outputs {
+		cName, err := stringToCString(out.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +287,7 @@ func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
 
 	results := make(map[string]*Value, outputCount)
 	for i := 0; i < outputCount; i++ {
-		results[s.OutputNames[i]] = &Value{
+		results[s.Outputs[i].Name] = &Value{
 			handle: outputHandles[i],
 			engine: s.engine,
 		}

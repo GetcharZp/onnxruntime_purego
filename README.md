@@ -63,23 +63,27 @@ func main() {
 	}
 	defer session.Destroy()
 
-	inputData := make([]float32, 3*640*640)
-	inputValue, err := engine.NewTensor([]int64{1, 3, 640, 640}, inputData)
+	// Prepare the data from the model's own declaration
+	input := session.Inputs[0]
+	count, ok := input.ElementCount()
+	if !ok {
+		log.Fatalf("input %q has a dynamic shape %v", input.Name, input.Shape)
+	}
+
+	inputValue, err := ort.NewTensor(input.Shape, make([]float32, count))
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer inputValue.Destroy()
 
-	inputs := map[string]*ort.Value{
-		"images": inputValue,
-	}
-
-	outputs, err := session.Run(inputs)
+	outputs, err := session.Run(map[string]*ort.Value{input.Name: inputValue})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	for name, output := range outputs {
+		defer output.Destroy()
+
 		outputData, err := ort.GetTensorData[float32](output)
 		if err != nil {
 			log.Fatal(err)

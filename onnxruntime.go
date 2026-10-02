@@ -143,6 +143,10 @@ func (e *Engine) initApi() error {
 	purego.RegisterFunc(&e.funcs.sessionGetOutputCount, e.api.SessionGetOutputCount)
 	purego.RegisterFunc(&e.funcs.sessionGetInputName, e.api.SessionGetInputName)
 	purego.RegisterFunc(&e.funcs.sessionGetOutputName, e.api.SessionGetOutputName)
+	purego.RegisterFunc(&e.funcs.sessionGetInputTypeInfo, e.api.SessionGetInputTypeInfo)
+	purego.RegisterFunc(&e.funcs.sessionGetOutputTypeInfo, e.api.SessionGetOutputTypeInfo)
+	purego.RegisterFunc(&e.funcs.castTypeInfoToTensorInfo, e.api.CastTypeInfoToTensorInfo)
+	purego.RegisterFunc(&e.funcs.releaseTypeInfo, e.api.ReleaseTypeInfo)
 	purego.RegisterFunc(&e.funcs.run, e.api.Run)
 	purego.RegisterFunc(&e.funcs.releaseSession, e.api.ReleaseSession)
 

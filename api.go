@@ -521,13 +521,17 @@ type apiFuncs struct {
 	disableCpuMemArena                    func(SessionOptionsHandle) StatusHandle
 
 	// session
-	createSession          func(EnvHandle, unsafe.Pointer, SessionOptionsHandle, *SessionHandle) StatusHandle
-	createSessionFromArray func(EnvHandle, unsafe.Pointer, uintptr, SessionOptionsHandle, *SessionHandle) StatusHandle
-	sessionGetInputCount   func(SessionHandle, *uintptr) StatusHandle
-	sessionGetOutputCount  func(SessionHandle, *uintptr) StatusHandle
-	sessionGetInputName    func(SessionHandle, uintptr, AllocatorHandle, **byte) StatusHandle
-	sessionGetOutputName   func(SessionHandle, uintptr, AllocatorHandle, **byte) StatusHandle
-	run                    func(SessionHandle, uintptr, *unsafe.Pointer, *ValueHandle, uintptr, *unsafe.Pointer, uintptr, *ValueHandle) StatusHandle
+	createSession            func(EnvHandle, unsafe.Pointer, SessionOptionsHandle, *SessionHandle) StatusHandle
+	createSessionFromArray   func(EnvHandle, unsafe.Pointer, uintptr, SessionOptionsHandle, *SessionHandle) StatusHandle
+	sessionGetInputCount     func(SessionHandle, *uintptr) StatusHandle
+	sessionGetOutputCount    func(SessionHandle, *uintptr) StatusHandle
+	sessionGetInputName      func(SessionHandle, uintptr, AllocatorHandle, **byte) StatusHandle
+	sessionGetOutputName     func(SessionHandle, uintptr, AllocatorHandle, **byte) StatusHandle
+	sessionGetInputTypeInfo  func(SessionHandle, uintptr, *TypeInfoHandle) StatusHandle
+	sessionGetOutputTypeInfo func(SessionHandle, uintptr, *TypeInfoHandle) StatusHandle
+	castTypeInfoToTensorInfo func(TypeInfoHandle, *TensorTypeAndShapeInfoHandle) StatusHandle
+	releaseTypeInfo          func(TypeInfoHandle)
+	run                      func(SessionHandle, uintptr, *unsafe.Pointer, *ValueHandle, uintptr, *unsafe.Pointer, uintptr, *ValueHandle) StatusHandle
 	//run                    func(SessionHandle, uintptr, **byte, *ValueHandle, uintptr, **byte, uintptr, *ValueHandle) StatusHandle
 	releaseSession func(SessionHandle)
 
