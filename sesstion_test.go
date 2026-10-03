@@ -73,17 +73,25 @@ func TestEngine_NewSession_TypeInfo(t *testing.T) {
 	testutil.Equal(t, len(session.Inputs), 1)
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 	testutil.Equal(t, session.Inputs[0].DataType, TensorElementDataTypeFloat)
-	testutil.Equal(t, session.Inputs[0].Shape, []int64{1, testChannels, testHeight, testWidth})
 
 	testutil.Equal(t, len(session.Outputs), 1)
 	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
 	testutil.Equal(t, session.Outputs[0].DataType, TensorElementDataTypeFloat)
-	testutil.Equal(t, session.Outputs[0].Shape, []int64{1, testRows, testAnchors})
 
-	// Shape 固定时可直接算出缓冲区长度
-	count, ok := session.Inputs[0].ElementCount()
-	testutil.Equal(t, ok, true)
-	testutil.Equal(t, count, int64(testChannels*testHeight*testWidth))
+	// 同一个模型可以导出成静态或动态形状，动态维度 onnxruntime 统一以 -1 表示
+	sameShape := func(got, want []int64) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("shape rank mismatch: got %v, want %v", got, want)
+		}
+		for i, dim := range got {
+			if dim != -1 && dim != want[i] {
+				t.Fatalf("shape mismatch: got %v, want %v (-1 表示动态维度)", got, want)
+			}
+		}
+	}
+	sameShape(session.Inputs[0].Shape, []int64{1, testChannels, testHeight, testWidth})
+	sameShape(session.Outputs[0].Shape, []int64{1, testRows, testAnchors})
 }
 
 func TestEngine_NewSession_ModelNotFound(t *testing.T) {
