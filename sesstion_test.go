@@ -139,9 +139,29 @@ func TestSessionOptions_EnableCUDA(t *testing.T) {
 
 	// 无 CUDA 环境的机器上 onnxruntime 会返回错误，此处只验证调用链不 panic。
 	// 生产环境可结合 availableProvider 判断是否具备 CUDA。
-	if err := opts.EnableCUDA(); err != nil {
+	if err := opts.EnableCUDA(map[string]string{"device_id": "0"}); err != nil {
 		t.Logf("CUDA provider unavailable: %v", err)
 	}
+}
+
+func TestSessionOptions_EnableTensorRT(t *testing.T) {
+	engine := newTestEngine(t)
+
+	opts, err := engine.NewSessionOptions()
+	testutil.Equal(t, err, nil)
+	defer opts.Destroy()
+
+	if err := opts.EnableTensorRT(map[string]string{"trt_fp16_enable": "1"}); err != nil {
+		t.Logf("TensorRT provider unavailable: %v", err)
+		t.Skip("skipping TensorRT session creation")
+	}
+
+	// 启用成功后应能正常构建 Session
+	session, err := engine.NewSession(testModelPath, opts)
+	testutil.Equal(t, err, nil)
+	defer session.Destroy()
+
+	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 }
 
 func TestSession_Run(t *testing.T) {

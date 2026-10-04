@@ -431,23 +431,24 @@ type ortApi struct {
 
 // OrtStatus is an opaque pointer to an ONNX Runtime status object.
 type (
-	StatusHandle                 uintptr
-	EnvHandle                    uintptr
-	SessionHandle                uintptr
-	SessionOptionsHandle         uintptr
-	ValueHandle                  uintptr
-	AllocatorHandle              uintptr
-	MemoryInfoHandle             uintptr
-	TensorTypeAndShapeInfoHandle uintptr
-	RunOptionsHandle             uintptr
-	TypeInfoHandle               uintptr
-	CUDAProviderOptionsV2Handle  uintptr
-	ErrorCode                    int32
-	LoggingLevel                 int32
-	OnnxType                     int32
-	TensorElementDataType        int32
-	AllocatorType                int32
-	MemType                      int32
+	StatusHandle                    uintptr
+	EnvHandle                       uintptr
+	SessionHandle                   uintptr
+	SessionOptionsHandle            uintptr
+	ValueHandle                     uintptr
+	AllocatorHandle                 uintptr
+	MemoryInfoHandle                uintptr
+	TensorTypeAndShapeInfoHandle    uintptr
+	RunOptionsHandle                uintptr
+	TypeInfoHandle                  uintptr
+	CUDAProviderOptionsV2Handle     uintptr
+	TensorRTProviderOptionsV2Handle uintptr
+	ErrorCode                       int32
+	LoggingLevel                    int32
+	OnnxType                        int32
+	TensorElementDataType           int32
+	AllocatorType                   int32
+	MemType                         int32
 )
 
 const (
@@ -511,6 +512,12 @@ type apiFuncs struct {
 	updateCUDAProviderOptions       func(CUDAProviderOptionsV2Handle, **byte, **byte, uintptr) StatusHandle
 	releaseCUDAProviderOptions      func(CUDAProviderOptionsV2Handle)
 	appendExecutionProvider_CUDA_V2 func(SessionOptionsHandle, CUDAProviderOptionsV2Handle) StatusHandle
+
+	// TensorRT
+	createTensorRTProviderOptions       func(*TensorRTProviderOptionsV2Handle) StatusHandle
+	updateTensorRTProviderOptions       func(TensorRTProviderOptionsV2Handle, **byte, **byte, uintptr) StatusHandle
+	releaseTensorRTProviderOptions      func(TensorRTProviderOptionsV2Handle)
+	appendExecutionProvider_TensorRT_V2 func(SessionOptionsHandle, TensorRTProviderOptionsV2Handle) StatusHandle
 
 	// session options
 	createSessionOptions                  func(*SessionOptionsHandle) StatusHandle

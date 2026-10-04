@@ -128,6 +128,12 @@ func (e *Engine) initApi() error {
 	purego.RegisterFunc(&e.funcs.updateCUDAProviderOptions, e.api.UpdateCUDAProviderOptions)
 	purego.RegisterFunc(&e.funcs.appendExecutionProvider_CUDA_V2, e.api.SessionOptionsAppendExecutionProvider_CUDA_V2)
 
+	// TensorRT
+	purego.RegisterFunc(&e.funcs.createTensorRTProviderOptions, e.api.CreateTensorRTProviderOptions)
+	purego.RegisterFunc(&e.funcs.releaseTensorRTProviderOptions, e.api.ReleaseTensorRTProviderOptions)
+	purego.RegisterFunc(&e.funcs.updateTensorRTProviderOptions, e.api.UpdateTensorRTProviderOptions)
+	purego.RegisterFunc(&e.funcs.appendExecutionProvider_TensorRT_V2, e.api.SessionOptionsAppendExecutionProvider_TensorRT_V2)
+
 	// session options
 	purego.RegisterFunc(&e.funcs.createSessionOptions, e.api.CreateSessionOptions)
 	purego.RegisterFunc(&e.funcs.setIntraOpNumThreads, e.api.SetIntraOpNumThreads)
