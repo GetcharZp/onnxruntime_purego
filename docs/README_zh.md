@@ -1,5 +1,5 @@
 <div align="center" style="text-align: center;">
-  <img src="./assets/logo.png" alt="logo" width="200" style="display: block; margin: 0 auto;" />
+  <img src="../assets/logo.png" alt="logo" width="200" style="display: block; margin: 0 auto;" />
 </div>
 
 <p align="center">
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> | 简体中文
+  <a href="../README.md">English</a> | 简体中文
 </p>
 
 基于 `purego` 实现的无 CGO 纯 Go 项目，通过 `purego` 直接绑定并调用 onnxruntime 原生库接口，无需依赖 CGO 编译环境，
@@ -23,22 +23,20 @@
 
 ## 安装
 
-下载 [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) 动态链接库，安装 `onnxruntime_purego` 库，版本对应关系：
+下载 [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) 动态链接库，安装对应 onnxruntime 1.26 的 `onnxruntime_purego` 库：
 
 | onnxruntime | onnxruntime_purego |
 |-------------|--------------------|
 | 1.26        | v1.26.0            |
-| 1.25        | v1.25.0            |
-| 1.24        | v1.24.0            |
-| 1.23        | v1.23.0            |
 
+历史版本请参考[版本映射表](./version-mapping.md)。
 
 ```shell
 # 下载最新版本
 go get -u github.com/getcharzp/onnxruntime_purego
 
 # 针对 onnxruntime 1.26 下载特定版本 purego
-go get -u github.com/getcharzp/onnxruntime_purego@v1.26
+go get -u github.com/getcharzp/onnxruntime_purego@v1.26.0
 ```
 
 ## 快速开始
@@ -98,4 +96,4 @@ func main() {
 
 | 原图                                                  | Mask图                                                      |
 |-----------------------------------------------------|------------------------------------------------------------|
-| <img width="100%" src="./testdata/test.png" alt=""> | <img width="100%" src="./testdata/yolov11_det.png" alt=""> |
+| <img width="100%" src="../testdata/test.png" alt=""> | <img width="100%" src="../testdata/yolov11_det.png" alt=""> |

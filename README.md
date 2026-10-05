@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  English | <a href="./README_zh.md">简体中文</a>
+  English | <a href="./docs/README_zh.md">简体中文</a>
 </p>
 
 A CGO-free, pure Go project built on top of `purego`. It binds directly to and calls the native onnxruntime
@@ -24,22 +24,20 @@ It is implemented based on the `onnxruntime` 1.26.0 headers.
 
 ## Installation
 
-Download the [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) dynamic library and install the `onnxruntime_purego` package. Version compatibility:
+Download the [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) dynamic library and install the `onnxruntime_purego` package for onnxruntime 1.26:
 
 | onnxruntime | onnxruntime_purego |
 |-------------|--------------------|
 | 1.26        | v1.26.0            |
-| 1.25        | v1.25.0            |
-| 1.24        | v1.24.0            |
-| 1.23        | v1.23.0            |
 
+For older releases, see the [version mapping table](./docs/version-mapping.md).
 
 ```shell
 # Download the latest version
 go get -u github.com/getcharzp/onnxruntime_purego
 
 # Download the specific release for onnxruntime 1.26
-go get -u github.com/getcharzp/onnxruntime_purego@v1.26
+go get -u github.com/getcharzp/onnxruntime_purego@v1.26.0
 ```
 
 ## Quick Start
