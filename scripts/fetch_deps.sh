@@ -7,7 +7,7 @@
 # 依赖已存在时自动跳过，可重复执行；本地与 CI（三平台）通用。
 set -euo pipefail
 
-ORT_VERSION="${ORT_VERSION:-1.26.0}"
+ORT_VERSION="${ORT_VERSION:-1.27.1}"
 ORT_BASE="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}"
 MODEL_URL="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.onnx"
 

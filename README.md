@@ -20,15 +20,15 @@
 
 A CGO-free, pure Go project built on top of `purego`. It binds directly to and calls the native onnxruntime
 library interfaces through `purego`, so ONNX models can be loaded and inferred without a CGO build environment.
-It is implemented based on the `onnxruntime` 1.26.0 headers.
+It is implemented based on the `onnxruntime` 1.27.1 headers.
 
 ## Installation
 
-Download the [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) dynamic library and install the `onnxruntime_purego` package for onnxruntime 1.26:
+Download the [onnxruntime 1.27](https://github.com/microsoft/onnxruntime/releases/tag/v1.27.1) dynamic library and install the `onnxruntime_purego` package for onnxruntime 1.27:
 
 | onnxruntime | onnxruntime_purego |
 |-------------|--------------------|
-| 1.26        | v1.26.0            |
+| 1.27        | v1.27.0            |
 
 For older releases, see the [version mapping table](./docs/version-mapping.md).
 
@@ -36,8 +36,8 @@ For older releases, see the [version mapping table](./docs/version-mapping.md).
 # Download the latest version
 go get -u github.com/getcharzp/onnxruntime_purego
 
-# Download the specific release for onnxruntime 1.26
-go get -u github.com/getcharzp/onnxruntime_purego@v1.26.0
+# Download the specific release for onnxruntime 1.27
+go get -u github.com/getcharzp/onnxruntime_purego@v1.27.0
 ```
 
 ## Quick Start

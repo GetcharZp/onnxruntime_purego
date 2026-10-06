@@ -19,15 +19,15 @@
 </p>
 
 基于 `purego` 实现的无 CGO 纯 Go 项目，通过 `purego` 直接绑定并调用 onnxruntime 原生库接口，无需依赖 CGO 编译环境，
-即可实现 ONNX 模型的加载与推理计算，基于 `onnxruntime` 1.26.0 的头文件实现。
+即可实现 ONNX 模型的加载与推理计算，基于 `onnxruntime` 1.27.1 的头文件实现。
 
 ## 安装
 
-下载 [onnxruntime 1.26](https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0) 动态链接库，安装对应 onnxruntime 1.26 的 `onnxruntime_purego` 库：
+下载 [onnxruntime 1.27](https://github.com/microsoft/onnxruntime/releases/tag/v1.27.1) 动态链接库，安装对应 onnxruntime 1.27 的 `onnxruntime_purego` 库：
 
 | onnxruntime | onnxruntime_purego |
 |-------------|--------------------|
-| 1.26        | v1.26.0            |
+| 1.27        | v1.27.0            |
 
 历史版本请参考[版本映射表](./version-mapping.md)。
 
@@ -35,8 +35,8 @@
 # 下载最新版本
 go get -u github.com/getcharzp/onnxruntime_purego
 
-# 针对 onnxruntime 1.26 下载特定版本 purego
-go get -u github.com/getcharzp/onnxruntime_purego@v1.26.0
+# 针对 onnxruntime 1.27 下载特定版本 purego
+go get -u github.com/getcharzp/onnxruntime_purego@v1.27.0
 ```
 
 ## 快速开始

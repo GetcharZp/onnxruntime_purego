@@ -427,6 +427,9 @@ type ortApi struct {
 	RunOptionsDisableProfiling                          uintptr // 416
 	KernelInfoGetAttributeArray_string                  uintptr // 417
 	SetPerSessionThreadPoolCallbacks                    uintptr // 418
+	GetMemPatternEnabled                                uintptr // 419
+	GetSessionExecutionMode                             uintptr // 420
+	SessionReleaseCapturedGraph                         uintptr // 421
 }
 
 // OrtStatus is an opaque pointer to an ONNX Runtime status object.
@@ -476,6 +479,9 @@ const (
 	TensorElementDataTypeUint4          TensorElementDataType = 21
 	TensorElementDataTypeInt4           TensorElementDataType = 22
 	TensorElementDataTypeFloat4E2M1     TensorElementDataType = 23
+	TensorElementDataTypeUint2          TensorElementDataType = 24
+	TensorElementDataTypeInt2           TensorElementDataType = 25
+	TensorElementDataTypeFloat8E8M0     TensorElementDataType = 26
 )
 
 const (
