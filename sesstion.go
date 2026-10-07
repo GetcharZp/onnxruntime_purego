@@ -32,6 +32,9 @@ type Session struct {
 
 	// Deprecated: 改用 Outputs[i].Name
 	OutputNames []string
+
+	// modelData 持有 NewSessionFromBytes 传入的模型字节，保证 Session 存活期间缓冲区不被回收
+	modelData []byte
 }
 
 type SessionOptions struct {
@@ -166,32 +169,52 @@ func (o *SessionOptions) Destroy() {
 //	modelPath: 模型路径
 //	opts: Session 配置项
 func (e *Engine) NewSession(modelPath string, opts *SessionOptions) (*Session, error) {
+	pathPtr, err := stringToPathPtr(modelPath)
+	if err != nil {
+		return nil, err
+	}
+	return e.newSession(opts, func(optHandle SessionOptionsHandle, h *SessionHandle) StatusHandle {
+		return e.funcs.createSession(e.envHandle, pathPtr, optHandle, h)
+	})
+}
+
+// NewSessionFromBytes 从内存中的模型字节创建会话，适用于 go:embed 等无文件场景
+//
+// # Params:
+//
+//	data: 模型字节
+//	opts: Session 配置项
+func (e *Engine) NewSessionFromBytes(data []byte, opts *SessionOptions) (*Session, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("NewSessionFromBytes: model data is empty")
+	}
+	s, err := e.newSession(opts, func(optHandle SessionOptionsHandle, h *SessionHandle) StatusHandle {
+		return e.funcs.createSessionFromArray(e.envHandle, unsafe.Pointer(slicePtr(data)), uintptr(len(data)), optHandle, h)
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.modelData = data
+	return s, nil
+}
+
+// newSession 调用底层创建接口并完成元信息初始化，create 由具体来源（路径 / 内存）提供
+func (e *Engine) newSession(opts *SessionOptions, create func(SessionOptionsHandle, *SessionHandle) StatusHandle) (*Session, error) {
 	var optHandle SessionOptionsHandle
 	if opts != nil {
 		optHandle = opts.handle
 	}
 
-	pathPtr, err := stringToPathPtr(modelPath)
-	if err != nil {
-		return nil, err
-	}
-
 	var h SessionHandle
-	status := e.funcs.createSession(e.envHandle, pathPtr, optHandle, &h)
-	if err := e.checkStatus(status); err != nil {
+	if err := e.checkStatus(create(optHandle, &h)); err != nil {
 		return nil, err
 	}
 
-	s := &Session{
-		handle: h,
-		engine: e,
-	}
-
+	s := &Session{handle: h, engine: e}
 	if err := s.initMetadata(); err != nil {
 		s.Destroy()
 		return nil, err
 	}
-
 	return s, nil
 }
 

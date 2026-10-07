@@ -2,6 +2,7 @@ package ort
 
 import (
 	"math"
+	"os"
 	"testing"
 
 	"github.com/up-zero/gotool/testutil"
@@ -64,6 +65,53 @@ func TestEngine_NewSession_WithoutOptions(t *testing.T) {
 
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
+}
+
+func TestEngine_NewSessionFromBytes(t *testing.T) {
+	engine := newTestEngine(t)
+
+	modelData, err := os.ReadFile(testModelPath)
+	testutil.Equal(t, err, nil)
+
+	session, err := engine.NewSessionFromBytes(modelData, nil)
+	testutil.Equal(t, err, nil)
+	defer session.Destroy()
+
+	testutil.Equal(t, session.Inputs[0].Name, testInputName)
+	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
+}
+
+func TestEngine_NewSessionFromBytes_Run(t *testing.T) {
+	engine := newTestEngine(t)
+
+	modelData, err := os.ReadFile(testModelPath)
+	testutil.Equal(t, err, nil)
+
+	session, err := engine.NewSessionFromBytes(modelData, nil)
+	testutil.Equal(t, err, nil)
+	defer session.Destroy()
+
+	inputValue, err := NewTensor([]int64{1, testChannels, testHeight, testWidth}, make([]float32, testChannels*testHeight*testWidth))
+	testutil.Equal(t, err, nil)
+	defer inputValue.Destroy()
+
+	outputs, err := session.Run(map[string]*Value{testInputName: inputValue})
+	testutil.Equal(t, err, nil)
+	defer func() {
+		for _, output := range outputs {
+			output.Destroy()
+		}
+	}()
+
+	testutil.Equal(t, mustShape(t, outputs[testOutputName]), []int64{1, testRows, testAnchors})
+}
+
+func TestEngine_NewSessionFromBytes_Empty(t *testing.T) {
+	engine := newTestEngine(t)
+
+	session, err := engine.NewSessionFromBytes(nil, nil)
+	testutil.NotEqual(t, err, nil)
+	testutil.Equal(t, session, (*Session)(nil))
 }
 
 // TestEngine_NewSession_TypeInfo 校验从模型读到的输入/输出类型与形状
