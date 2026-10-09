@@ -3,6 +3,7 @@ package ort
 import (
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 	"github.com/getcharzp/onnxruntime_purego/internal/sys"
@@ -203,6 +204,62 @@ func (e *Engine) GetVersion() string {
 		return "unknown"
 	}
 	return e.funcs.getVersionString()
+}
+
+// GetAvailableProviders 获取当前 onnxruntime 构建支持的 Execution Provider 名称列表，
+// 可在调用 SessionOptions.EnableCUDA / EnableTensorRT 前判断环境是否具备对应 EP：
+//
+// # Example:
+//
+//	opts, _ := engine.NewSessionOptions()
+//	for _, p := range engine.GetAvailableProviders() {
+//		if p == "CUDAExecutionProvider" {
+//			opts.EnableCUDA(nil)
+//		}
+//	}
+//
+// # Returns:
+//
+//	[]string: 名称列表；查询失败时为 nil。目前 onnxruntime 支持的 EP 有：
+//	  CPUExecutionProvider         CPU，内置，始终存在
+//	  AzureExecutionProvider       Azure
+//	  CUDAExecutionProvider        NVIDIA CUDA
+//	  CUDANHWCExecutionProvider    NVIDIA CUDA NHWC
+//	  TensorrtExecutionProvider    NVIDIA TensorRT
+//	  ROCMExecutionProvider        AMD ROCm
+//	  MIGraphXExecutionProvider    AMD MIGraphX
+//	  DmlExecutionProvider         DirectML（Windows）
+//	  OpenVINOExecutionProvider    Intel OpenVINO
+//	  DnnlExecutionProvider        Intel oneDNN
+//	  QNNExecutionProvider         Qualcomm QNN
+//	  SNPEExecutionProvider        Qualcomm SNPE
+//	  CoreMLExecutionProvider      Apple CoreML
+//	  ArmNNExecutionProvider       Arm NN
+//	  ACLExecutionProvider         Arm Compute Library
+//	  NnapiExecutionProvider       Android NNAPI
+//	  XnnpackExecutionProvider     XNNPACK
+//	  VitisAIExecutionProvider     AMD Vitis AI
+//	  CANNExecutionProvider        Huawei CANN
+//	  VSINPUExecutionProvider      VeriSilicon NPU
+//	  RknpuExecutionProvider       Rockchip NPU
+//	  WebNNExecutionProvider       WebNN
+//	  JsExecutionProvider          JavaScript
+//	  TvmExecutionProvider         Apache TVM
+//
+// 具体返回范围取决于编译时启用的 EP，不同平台结果可能不同。
+func (e *Engine) GetAvailableProviders() []string {
+	var providers **byte
+	var count int32
+	if err := e.checkStatus(e.funcs.getAvailableProviders(&providers, &count)); err != nil {
+		return nil
+	}
+	defer e.funcs.releaseAvailableProviders(providers, count)
+
+	names := make([]string, 0, count)
+	for _, p := range unsafe.Slice(providers, count) {
+		names = append(names, cStringToString(p))
+	}
+	return names
 }
 
 // cleanup 释放 env / memory info，可重复调用

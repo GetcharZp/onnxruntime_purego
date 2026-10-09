@@ -3,6 +3,7 @@ package ort
 import (
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,6 +54,15 @@ func TestEngine_GetVersion(t *testing.T) {
 	major, _, ok := strings.Cut(version, ".")
 	testutil.Equal(t, ok, true)
 	testutil.Equal(t, major, "1")
+}
+
+func TestEngine_GetAvailableProviders(t *testing.T) {
+	engine := newTestEngine(t)
+
+	providers := engine.GetAvailableProviders()
+
+	// CPUExecutionProvider 为 onnxruntime 内置，任何构建都应存在
+	testutil.Equal(t, slices.Contains(providers, "CPUExecutionProvider"), true)
 }
 
 func TestNewEngine_InvalidLibraryPath(t *testing.T) {
