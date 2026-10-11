@@ -532,6 +532,8 @@ type apiFuncs struct {
 	releaseSessionOptions                 func(SessionOptionsHandle)
 	enableCpuMemArena                     func(SessionOptionsHandle) StatusHandle
 	disableCpuMemArena                    func(SessionOptionsHandle) StatusHandle
+	addFreeDimensionOverride              func(SessionOptionsHandle, *byte, int64) StatusHandle
+	addFreeDimensionOverrideByName        func(SessionOptionsHandle, *byte, int64) StatusHandle
 
 	// session
 	createSession            func(EnvHandle, unsafe.Pointer, SessionOptionsHandle, *SessionHandle) StatusHandle

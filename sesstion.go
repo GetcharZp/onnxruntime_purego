@@ -67,6 +67,53 @@ func (o *SessionOptions) SetCpuMemArena(useArena bool) error {
 	return o.engine.checkStatus(o.engine.funcs.disableCpuMemArena(o.handle))
 }
 
+// AddFreeDimensionOverrideByName 按维度名固化模型的动态维度
+//
+// 动态模型（如 YOLO）的输入维度常以 -1 出现，导致 TensorInfo.ElementCount 无法计算，
+// 也会让 NewTensor 无从下手。在创建 Session 前按维度名覆盖即可消除动态维：
+//
+//	opts, _ := engine.NewSessionOptions()
+//	opts.AddFreeDimensionOverrideByName("batch", 1)
+//	session, _ := engine.NewSession("yolo11n.onnx", opts) // session.Inputs[0].Shape 中该维固定为 1
+//
+// # Params:
+//
+//	name: 维度名，取自模型定义，例如 batch / height / width
+//	dim: 固定的维度值
+//
+// # Returns:
+//
+//	error: 失败时的错误信息
+func (o *SessionOptions) AddFreeDimensionOverrideByName(name string, dim int64) error {
+	return o.setFreeDimensionOverride(name, dim, o.engine.funcs.addFreeDimensionOverrideByName)
+}
+
+// AddFreeDimensionOverride 按维度符号（denotation）固化动态维度
+//
+// 与 AddFreeDimensionOverrideByName 的区别在于匹配的是维度上的 denotation 标记而非维度名，
+// 适用于维度名不固定、但带有语义符号（如 DATA_BATCH）的模型。
+//
+// # Params:
+//
+//	denotation: 维度符号，例如 DATA_BATCH
+//	dim: 固定的维度值
+//
+// # Returns:
+//
+//	error: 失败时的错误信息
+func (o *SessionOptions) AddFreeDimensionOverride(denotation string, dim int64) error {
+	return o.setFreeDimensionOverride(denotation, dim, o.engine.funcs.addFreeDimensionOverride)
+}
+
+// setFreeDimensionOverride 按 key 固化动态维度，fn 为对应的 onnxruntime 接口
+func (o *SessionOptions) setFreeDimensionOverride(key string, dim int64, fn func(SessionOptionsHandle, *byte, int64) StatusHandle) error {
+	keyPtr, err := stringToCString(key)
+	if err != nil {
+		return err
+	}
+	return o.engine.checkStatus(fn(o.handle, keyPtr, dim))
+}
+
 // providerOptions 描述一个 V2 形式的 Execution Provider：创建配置 -> 写入键值 -> 挂到 SessionOptions
 type providerOptions[H any] struct {
 	create  func(*H) StatusHandle

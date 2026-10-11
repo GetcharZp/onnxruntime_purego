@@ -142,6 +142,8 @@ func (e *Engine) initApi() error {
 	purego.RegisterFunc(&e.funcs.releaseSessionOptions, e.api.ReleaseSessionOptions)
 	purego.RegisterFunc(&e.funcs.enableCpuMemArena, e.api.EnableCpuMemArena)
 	purego.RegisterFunc(&e.funcs.disableCpuMemArena, e.api.DisableCpuMemArena)
+	purego.RegisterFunc(&e.funcs.addFreeDimensionOverride, e.api.AddFreeDimensionOverride)
+	purego.RegisterFunc(&e.funcs.addFreeDimensionOverrideByName, e.api.AddFreeDimensionOverrideByName)
 
 	// session
 	purego.RegisterFunc(&e.funcs.createSession, e.api.CreateSession)

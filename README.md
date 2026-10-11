@@ -91,6 +91,53 @@ func main() {
 }
 ```
 
+## Usage
+
+### Loading a Model from Memory
+
+Use `NewSessionFromBytes` to load a model embedded with `go:embed`, avoiding file path dependencies:
+
+```go
+import _ "embed"
+
+//go:embed models/yolo11n.onnx
+var modelData []byte
+
+session, err := engine.NewSessionFromBytes(modelData, nil)
+```
+
+The returned session holds a reference to `modelData`, so the buffer stays valid for its lifetime; do not modify it while the session is alive.
+
+### Dynamic Shapes
+
+Models exported with dynamic dimensions report them as `-1`, which makes `TensorInfo.ElementCount` fail. Fix the dimension when creating the session:
+
+```go
+opts, _ := engine.NewSessionOptions()
+defer opts.Destroy()
+opts.AddFreeDimensionOverrideByName("batch", 1)
+
+session, _ := engine.NewSession("model.onnx", opts)
+// the dimension is now fixed to 1 instead of -1 in session.Inputs[i].Shape
+```
+
+Use `AddFreeDimensionOverride` instead when the dimension carries a denotation such as `DATA_BATCH`.
+
+### Execution Providers
+
+Check which execution providers the local onnxruntime build supports before enabling one:
+
+```go
+opts, _ := engine.NewSessionOptions()
+defer opts.Destroy()
+
+for _, p := range engine.GetAvailableProviders() {
+    if p == "CUDAExecutionProvider" {
+        opts.EnableCUDA(nil)
+    }
+}
+```
+
 ## Examples
 
 ### YOLOv11 Object Detection

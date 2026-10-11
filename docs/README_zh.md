@@ -90,6 +90,53 @@ func main() {
 }
 ```
 
+## 使用说明
+
+### 从内存加载模型
+
+使用 `NewSessionFromBytes` 加载 `go:embed` 嵌入的模型，摆脱文件路径依赖：
+
+```go
+import _ "embed"
+
+//go:embed models/yolo11n.onnx
+var modelData []byte
+
+session, err := engine.NewSessionFromBytes(modelData, nil)
+```
+
+返回的 Session 会持有 `modelData` 的引用以保证其生命周期，因此会话存活期间不应修改该缓冲区。
+
+### 动态形状
+
+导出为动态维度的模型会将其表示为 `-1`，导致 `TensorInfo.ElementCount` 无法计算。在创建 Session 时固化该维度即可：
+
+```go
+opts, _ := engine.NewSessionOptions()
+defer opts.Destroy()
+opts.AddFreeDimensionOverrideByName("batch", 1)
+
+session, _ := engine.NewSession("model.onnx", opts)
+// session.Inputs[i].Shape 中该维固定为 1，不再出现 -1
+```
+
+若维度带有 denotation（如 `DATA_BATCH`），则改用 `AddFreeDimensionOverride`。
+
+### Execution Provider
+
+在启用某个 Execution Provider 前，可先确认本地 onnxruntime 构建是否支持：
+
+```go
+opts, _ := engine.NewSessionOptions()
+defer opts.Destroy()
+
+for _, p := range engine.GetAvailableProviders() {
+    if p == "CUDAExecutionProvider" {
+        opts.EnableCUDA(nil)
+    }
+}
+```
+
 ## 案例
 
 ### YOLOv11 目标检测
