@@ -34,11 +34,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "onnxruntime_error_code.h"
+
 /** \brief The API version defined in this header
  *
  * This value is used by some API functions to behave as this version of the header expects.
  */
-#define ORT_API_VERSION 27
+#define ORT_API_VERSION 28
 
 #ifdef __cplusplus
 extern "C" {
@@ -263,24 +265,6 @@ typedef enum OrtLoggingLevel {
   ORT_LOGGING_LEVEL_FATAL,    ///< Fatal error messages (most severe).
 } OrtLoggingLevel;
 
-typedef enum OrtErrorCode {
-  ORT_OK,
-  ORT_FAIL,
-  ORT_INVALID_ARGUMENT,
-  ORT_NO_SUCHFILE,
-  ORT_NO_MODEL,
-  ORT_ENGINE_ERROR,
-  ORT_RUNTIME_EXCEPTION,
-  ORT_INVALID_PROTOBUF,
-  ORT_MODEL_LOADED,
-  ORT_NOT_IMPLEMENTED,
-  ORT_INVALID_GRAPH,
-  ORT_EP_FAIL,
-  ORT_MODEL_LOAD_CANCELED,
-  ORT_MODEL_REQUIRES_COMPILATION,
-  ORT_NOT_FOUND,
-} OrtErrorCode;
-
 typedef enum OrtOpAttrType {
   ORT_OP_ATTR_UNDEFINED = 0,
   ORT_OP_ATTR_INT,
@@ -354,6 +338,16 @@ typedef _Return_type_success_(return == 0) OrtStatus* OrtStatusPtr;
 #else
 typedef OrtStatus* OrtStatusPtr;
 #endif
+
+/** \brief Generic function pointer type for experimental API lookup.
+ *
+ * Returned by OrtApi::GetExperimentalFunction. Cast to the correct function pointer type before calling.
+ * The experimental API function pointer types are defined in onnxruntime_experimental_c_api.h.
+ *
+ * This is a function pointer rather than \c void* because casting between function pointers and object
+ * pointers is undefined behavior in C and C++. Using a function pointer type keeps all casts well-defined.
+ */
+typedef void(ORT_API_CALL* OrtExperimentalFnPtr)(void);
 
 /** \brief Memory allocation interface
  *
@@ -3007,6 +3001,7 @@ struct OrtApi {
    * For example, given a tensor with shape of [3,224,224], a pointer to the element at location [2,150,128] can be retrieved
    *
    * This function only works for numeric type tensors (No strings, etc).
+   * This function does not support sub-byte packed types (e.g., int4).
    * This is a no-copy method whose returned pointer is valid until the passed in ::OrtValue is free'd.
    *
    * \param[in] value
@@ -5409,13 +5404,11 @@ struct OrtApi {
   ORT_CLASS_RELEASE(Node);
 
   /** \brief Release an OrtGraph.
-   * \snippet{doc} snippets.dox OrtStatus Return Value
    * \since Version 1.22.
    */
   ORT_CLASS_RELEASE(Graph);
 
   /** \brief Release an OrtModel.
-   * \snippet{doc} snippets.dox OrtStatus Return Value
    * \since Version 1.22.
    */
   ORT_CLASS_RELEASE(Model);
@@ -7486,6 +7479,44 @@ struct OrtApi {
    * \since Version 1.27.
    */
   ORT_API2_STATUS(SessionReleaseCapturedGraph, _In_ OrtSession* session, _In_ int graph_annotation_id);
+
+  /** \brief Retrieve an experimental function pointer by name.
+   *
+   * Experimental functions are not part of the stable ABI and may be added or removed between releases without notice.
+   * Use the companion header onnxruntime_experimental_c_api.h for typedefs, name constants, and (for C++) typed
+   * accessors.
+   *
+   * \param[in] name The null-terminated name of the experimental function to look up.
+   *                 Names follow the pattern "<target struct>_<function name>_SinceV<ORT API version added>".
+   *                 Name constants are defined in onnxruntime_experimental_c_api.h.
+   * \return The function pointer cast to ::OrtExperimentalFnPtr, or nullptr if the function is not available in this
+   *         build. The caller must cast the returned pointer to the correct function pointer type before calling.
+   *         Function pointer typedefs are defined in onnxruntime_experimental_c_api.h.
+   *
+   * \since Version 1.28.
+   */
+  ORT_API_T(OrtExperimentalFnPtr, GetExperimentalFunction, _In_ const char* name);
+
+  /** \brief Get the framework synchronization stream associated with a kernel context.
+   *
+   * This returns the framework stream wrapper for the execution provider stream used by this kernel invocation.
+   * It is intended for APIs that need a stable framework stream object for stream-aware allocation and
+   * synchronization bookkeeping. Use KernelContext_GetGPUComputeStream when launching native GPU work.
+   *
+   * \param[in] context OrtKernelContext instance.
+   * \param[out] out Returns the framework synchronization stream, or nullptr if the kernel has no stream.
+   *                 Do not free or mutate the returned pointer. It is owned by the underlying session.
+   *                 The pointer may be stored and used for stream-aware allocation and synchronization
+   *                 bookkeeping beyond the Compute call (e.g. an allocator may persist it in arena
+   *                 chunks); it remains valid until the owning Session::Run() completes its teardown.
+   *                 Do not retain or dereference it after the run that produced this kernel context ends.
+   *
+   * \snippet{doc} snippets.dox OrtStatus Return Value
+   *
+   * \since Version 1.28.
+   */
+  ORT_API2_STATUS(KernelContext_GetSyncStream, _In_ const OrtKernelContext* context,
+                  _Outptr_result_maybenull_ OrtSyncStream** out);
 };
 
 /*

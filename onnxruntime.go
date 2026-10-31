@@ -12,6 +12,8 @@ import (
 type ApiVersion uint32
 
 const (
+	// ApiVersion23 是本包所需的最低 C API 版本：所用接口自 1.23 起均存在，
+	// 请求 23 可同时兼容 1.23 ~ 1.28 的运行时；更高版本仅追加函数，不影响既有偏移。
 	ApiVersion23 ApiVersion = 23
 
 	LogVerbose LoggingLevel = 0
@@ -200,7 +202,7 @@ func (e *Engine) initMemInfo() error {
 	return nil
 }
 
-// GetVersion 获取版本字符串，例如：1.23.2
+// GetVersion 获取版本字符串，例如：1.28.3
 func (e *Engine) GetVersion() string {
 	if e.funcs.getVersionString == nil {
 		return "unknown"

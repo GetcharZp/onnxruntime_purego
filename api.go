@@ -430,6 +430,8 @@ type ortApi struct {
 	GetMemPatternEnabled                                uintptr // 419
 	GetSessionExecutionMode                             uintptr // 420
 	SessionReleaseCapturedGraph                         uintptr // 421
+	GetExperimentalFunction                             uintptr // 422
+	KernelContext_GetSyncStream                         uintptr // 423
 }
 
 // OrtStatus is an opaque pointer to an ONNX Runtime status object.
