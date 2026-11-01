@@ -16,6 +16,11 @@ func LoadLibrary(name string) (uintptr, error) {
 	return uintptr(handle), nil
 }
 
+// Symbol 查找动态库中的导出符号
+func Symbol(handle uintptr, name string) (uintptr, error) {
+	return syscall.GetProcAddress(syscall.Handle(handle), name)
+}
+
 // FreeLibrary 卸载动态库文件
 //
 // 仅在初始化失败、库中尚未建立任何全局状态时调用；正常使用流程不应卸载

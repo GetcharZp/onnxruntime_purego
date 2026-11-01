@@ -5,6 +5,7 @@ import (
 	"unsafe"
 )
 
+// TensorInfo 描述模型的输入 / 输出
 type TensorInfo struct {
 	Name     string
 	DataType TensorElementDataType
@@ -16,32 +17,36 @@ type TensorInfo struct {
 // # Returns:
 //
 //	int64: 元素总数
-//	bool: 是否成功计算出元素总数
+//	bool: 是否成功计算出元素总数，形状含动态维度(-1)或乘积溢出时为 false
 func (t TensorInfo) ElementCount() (int64, bool) {
 	return shapeElementCount(t.Shape)
 }
 
+// Session 表示一个加载好的模型会话
 type Session struct {
-	handle  SessionHandle
-	engine  *Engine
+	handle SessionHandle
+	engine *Engine
+
+	// Inputs / Outputs 为模型声明的输入 / 输出元信息，顺序与模型定义一致
 	Inputs  []TensorInfo
 	Outputs []TensorInfo
 
-	// Deprecated: 改用 Inputs[i].Name
-	InputNames []string
-
-	// Deprecated: 改用 Outputs[i].Name
-	OutputNames []string
+	// 输入 / 输出名在创建时转换为 C 字符串并缓存，Run 无需逐次分配；
+	// 同时保证 onnxruntime 读取期间这些内存始终可达。
+	inputNames     map[string]unsafe.Pointer
+	outputNamePtrs []unsafe.Pointer
 
 	// modelData 持有 NewSessionFromBytes 传入的模型字节，保证 Session 存活期间缓冲区不被回收
 	modelData []byte
 }
 
+// SessionOptions 是创建 Session 时使用的配置，用完后需调用 Close
 type SessionOptions struct {
 	handle SessionOptionsHandle
 	engine *Engine
 }
 
+// NewSessionOptions 创建 Session 配置项
 func (e *Engine) NewSessionOptions() (*SessionOptions, error) {
 	var h SessionOptionsHandle
 	status := e.funcs.createSessionOptions(&h)
@@ -51,20 +56,21 @@ func (e *Engine) NewSessionOptions() (*SessionOptions, error) {
 	return &SessionOptions{handle: h, engine: e}, nil
 }
 
-// SetIntraOpNumThreads 设置线程数
-func (o *SessionOptions) SetIntraOpNumThreads(num int32) error {
-	return o.engine.checkStatus(o.engine.funcs.setIntraOpNumThreads(o.handle, num))
+// SetIntraOpNumThreads 设置算子内并行线程数
+func (o *SessionOptions) SetIntraOpNumThreads(num int) error {
+	return o.engine.checkStatus(o.engine.funcs.setIntraOpNumThreads(o.handle, int32(num)))
 }
 
-// SetCpuMemArena 设置内存池策略
+// SetCPUMemArena 设置 CPU 内存池策略
 //
-//	false: 禁用内存池，推理速度稍慢，但 Destroy 后立即归还内存给 OS ，解决内存滞留问题
-//	true: 启用内存池，推理速度最快，但 Destroy 后内存会被缓存以供复用（默认）
-func (o *SessionOptions) SetCpuMemArena(useArena bool) error {
-	if useArena {
-		return o.engine.checkStatus(o.engine.funcs.enableCpuMemArena(o.handle))
+//	false: 禁用内存池，推理速度稍慢，但 Close 后立即归还内存给 OS ，解决内存滞留问题
+//	true: 启用内存池，推理速度最快，但 Close 后内存会被缓存以供复用（默认）
+func (o *SessionOptions) SetCPUMemArena(enabled bool) error {
+	arena := o.engine.funcs.enableCpuMemArena
+	if !enabled {
+		arena = o.engine.funcs.disableCpuMemArena
 	}
-	return o.engine.checkStatus(o.engine.funcs.disableCpuMemArena(o.handle))
+	return o.engine.checkStatus(arena(o.handle))
 }
 
 // AddFreeDimensionOverrideByName 按维度名固化模型的动态维度
@@ -107,11 +113,7 @@ func (o *SessionOptions) AddFreeDimensionOverride(denotation string, dim int64) 
 
 // setFreeDimensionOverride 按 key 固化动态维度，fn 为对应的 onnxruntime 接口
 func (o *SessionOptions) setFreeDimensionOverride(key string, dim int64, fn func(SessionOptionsHandle, *byte, int64) StatusHandle) error {
-	keyPtr, err := stringToCString(key)
-	if err != nil {
-		return err
-	}
-	return o.engine.checkStatus(fn(o.handle, keyPtr, dim))
+	return o.engine.checkStatus(fn(o.handle, cString(key), dim))
 }
 
 // providerOptions 描述一个 V2 形式的 Execution Provider：创建配置 -> 写入键值 -> 挂到 SessionOptions
@@ -189,9 +191,7 @@ func enableProvider[H any](o *SessionOptions, p providerOptions[H], options map[
 		keys := make([]*byte, 0, len(options))
 		values := make([]*byte, 0, len(options))
 		for k, v := range options {
-			key, _ := stringToCString(k)
-			value, _ := stringToCString(v)
-			keys, values = append(keys, key), append(values, value)
+			keys, values = append(keys, cString(k)), append(values, cString(v))
 		}
 		status := p.update(cfg, slicePtr(keys), slicePtr(values), uintptr(len(keys)))
 		if err := o.engine.checkStatus(status); err != nil {
@@ -202,7 +202,8 @@ func enableProvider[H any](o *SessionOptions, p providerOptions[H], options map[
 	return o.engine.checkStatus(p.append(o.handle, cfg))
 }
 
-func (o *SessionOptions) Destroy() {
+// Close 释放 SessionOptions
+func (o *SessionOptions) Close() {
 	if o.handle != 0 {
 		o.engine.funcs.releaseSessionOptions(o.handle)
 		o.handle = 0
@@ -214,7 +215,7 @@ func (o *SessionOptions) Destroy() {
 // # Params:
 //
 //	modelPath: 模型路径
-//	opts: Session 配置项
+//	opts: Session 配置项，可为 nil
 func (e *Engine) NewSession(modelPath string, opts *SessionOptions) (*Session, error) {
 	pathPtr, err := stringToPathPtr(modelPath)
 	if err != nil {
@@ -229,8 +230,8 @@ func (e *Engine) NewSession(modelPath string, opts *SessionOptions) (*Session, e
 //
 // # Params:
 //
-//	data: 模型字节
-//	opts: Session 配置项
+//	data: 模型字节，Session 存活期间不应修改
+//	opts: Session 配置项，可为 nil
 func (e *Engine) NewSessionFromBytes(data []byte, opts *SessionOptions) (*Session, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("NewSessionFromBytes: model data is empty")
@@ -259,7 +260,7 @@ func (e *Engine) newSession(opts *SessionOptions, create func(SessionOptionsHand
 
 	s := &Session{handle: h, engine: e}
 	if err := s.initMetadata(); err != nil {
-		s.Destroy()
+		s.Close()
 		return nil, err
 	}
 	return s, nil
@@ -274,8 +275,14 @@ func (s *Session) initMetadata() error {
 		return err
 	}
 
-	// 兼容已弃用字段，不额外产生 onnxruntime 调用
-	s.InputNames, s.OutputNames = tensorNames(s.Inputs), tensorNames(s.Outputs)
+	s.inputNames = make(map[string]unsafe.Pointer, len(s.Inputs))
+	for _, in := range s.Inputs {
+		s.inputNames[in.Name] = unsafe.Pointer(cString(in.Name))
+	}
+	s.outputNamePtrs = make([]unsafe.Pointer, len(s.Outputs))
+	for i, out := range s.Outputs {
+		s.outputNamePtrs[i] = unsafe.Pointer(cString(out.Name))
+	}
 	return nil
 }
 
@@ -317,7 +324,7 @@ func (s *Session) collectMetadata(isInput bool) ([]TensorInfo, error) {
 		if err := s.engine.checkStatus(name(s.handle, uintptr(i), allocator, &namePtr)); err != nil {
 			return nil, err
 		}
-		infos[i].Name = cStringToString(namePtr)
+		infos[i].Name = goString(namePtr)
 		f.allocatorFree(allocator, unsafe.Pointer(namePtr))
 
 		var ti TypeInfoHandle
@@ -368,7 +375,10 @@ func (s *Session) readTensorType(ti TypeInfoHandle) (TensorElementDataType, []in
 	return dataType, shape, nil
 }
 
-func (s *Session) Destroy() {
+// Close 释放 Session
+//
+// Session 由 Engine 创建并引用 Engine，必须先于 Engine.Close 调用。
+func (s *Session) Close() {
 	if s.handle != 0 {
 		s.engine.funcs.releaseSession(s.handle)
 		s.handle = 0
@@ -377,66 +387,44 @@ func (s *Session) Destroy() {
 
 // Run 执行推理
 //
-// inputs 的 key 为输入名（见 Session.Inputs），返回的 Value 由调用方负责 Destroy。
+// inputs 的 key 为输入名（见 Session.Inputs），返回的 Value 由调用方负责 Close。
 func (s *Session) Run(inputs map[string]*Value) (map[string]*Value, error) {
-	inputCount := len(inputs)
-	outputCount := len(s.Outputs)
-
-	if inputCount == 0 {
+	if len(inputs) == 0 {
 		return nil, fmt.Errorf("session.Run: no inputs provided, expect %v", tensorNames(s.Inputs))
 	}
 
-	// input
-	inputNamePtrs := make([]unsafe.Pointer, inputCount)
-	inputHandles := make([]ValueHandle, inputCount)
-	i := 0
+	inputNamePtrs := make([]unsafe.Pointer, 0, len(inputs))
+	inputHandles := make([]ValueHandle, 0, len(inputs))
 	for name, val := range inputs {
+		namePtr, ok := s.inputNames[name]
+		if !ok {
+			return nil, fmt.Errorf("session.Run: unknown input %q, expect %v", name, tensorNames(s.Inputs))
+		}
 		if val == nil {
 			return nil, fmt.Errorf("session.Run: input %q is nil", name)
 		}
-		cName, err := stringToCString(name)
-		if err != nil {
-			return nil, err
-		}
-		inputNamePtrs[i] = unsafe.Pointer(cName)
-		inputHandles[i] = val.handle
-		i++
+		inputNamePtrs = append(inputNamePtrs, namePtr)
+		inputHandles = append(inputHandles, val.handle)
 	}
 
-	// output
-	outputNamePtrs := make([]unsafe.Pointer, outputCount)
-	outputHandles := make([]ValueHandle, outputCount)
-	for i, out := range s.Outputs {
-		cName, err := stringToCString(out.Name)
-		if err != nil {
-			return nil, err
-		}
-		outputNamePtrs[i] = unsafe.Pointer(cName)
-	}
-
-	// 调用底层执行推理
+	outputHandles := make([]ValueHandle, len(s.Outputs))
 	status := s.engine.funcs.run(
 		s.handle,
 		0,
 		slicePtr(inputNamePtrs),
 		slicePtr(inputHandles),
-		uintptr(inputCount),
-		slicePtr(outputNamePtrs),
-		uintptr(outputCount),
+		uintptr(len(inputHandles)),
+		slicePtr(s.outputNamePtrs),
+		uintptr(len(s.outputNamePtrs)),
 		slicePtr(outputHandles),
 	)
-
 	if err := s.engine.checkStatus(status); err != nil {
 		return nil, fmt.Errorf("failed to run session: %w", err)
 	}
 
-	results := make(map[string]*Value, outputCount)
-	for i := 0; i < outputCount; i++ {
-		results[s.Outputs[i].Name] = &Value{
-			handle: outputHandles[i],
-			engine: s.engine,
-		}
+	results := make(map[string]*Value, len(s.Outputs))
+	for i, out := range s.Outputs {
+		results[out.Name] = &Value{handle: outputHandles[i], engine: s.engine}
 	}
-
 	return results, nil
 }

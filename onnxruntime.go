@@ -9,12 +9,12 @@ import (
 	"github.com/getcharzp/onnxruntime_purego/internal/sys"
 )
 
-type ApiVersion uint32
+type APIVersion uint32
 
 const (
-	// ApiVersion23 是本包所需的最低 C API 版本：所用接口自 1.23 起均存在，
+	// APIVersion23 是本包所需的最低 C API 版本：所用接口自 1.23 起均存在，
 	// 请求 23 可同时兼容 1.23 ~ 1.28 的运行时；更高版本仅追加函数，不影响既有偏移。
-	ApiVersion23 ApiVersion = 23
+	APIVersion23 APIVersion = 23
 
 	LogVerbose LoggingLevel = 0
 	LogInfo    LoggingLevel = 1
@@ -47,7 +47,7 @@ func setDefaultEngine(e *Engine) {
 // Engine 推理引擎上下文
 type Engine struct {
 	handle  uintptr
-	version ApiVersion
+	version APIVersion
 	api     *ortApi
 	funcs   *apiFuncs
 
@@ -56,6 +56,10 @@ type Engine struct {
 }
 
 // NewEngine 初始化引擎
+//
+// # Params:
+//
+//	libPath: onnxruntime 动态库路径，通常取 DefaultLibraryPath()
 func NewEngine(libPath string) (*Engine, error) {
 	handle, err := sys.LoadLibrary(libPath)
 	if err != nil {
@@ -64,7 +68,7 @@ func NewEngine(libPath string) (*Engine, error) {
 
 	e := &Engine{
 		handle:  handle,
-		version: ApiVersion23,
+		version: APIVersion23,
 		funcs:   &apiFuncs{},
 	}
 
@@ -90,8 +94,12 @@ func NewEngine(libPath string) (*Engine, error) {
 
 func (e *Engine) initApi() error {
 	// 获取 OrtGetApiBase 导出函数
+	addr, err := sys.Symbol(e.handle, "OrtGetApiBase")
+	if err != nil {
+		return fmt.Errorf("failed to find OrtGetApiBase: %w", err)
+	}
 	var ortGetApiBase func() *ortApiBase
-	purego.RegisterLibFunc(&ortGetApiBase, e.handle, "OrtGetApiBase")
+	purego.RegisterFunc(&ortGetApiBase, addr)
 
 	apiBase := ortGetApiBase()
 	if apiBase == nil {
@@ -100,7 +108,7 @@ func (e *Engine) initApi() error {
 	purego.RegisterFunc(&e.funcs.getVersionString, apiBase.GetVersionString)
 
 	// 绑定 GetAPI 函数
-	var getApi func(ApiVersion) *ortApi
+	var getApi func(APIVersion) *ortApi
 	purego.RegisterFunc(&getApi, apiBase.GetAPI)
 	e.api = getApi(e.version)
 	if e.api == nil {
@@ -108,7 +116,6 @@ func (e *Engine) initApi() error {
 	}
 
 	// status, error
-	purego.RegisterFunc(&e.funcs.createStatus, e.api.CreateStatus)
 	purego.RegisterFunc(&e.funcs.getErrorCode, e.api.GetErrorCode)
 	purego.RegisterFunc(&e.funcs.getErrorMessage, e.api.GetErrorMessage)
 	purego.RegisterFunc(&e.funcs.releaseStatus, e.api.ReleaseStatus)
@@ -140,7 +147,6 @@ func (e *Engine) initApi() error {
 	// session options
 	purego.RegisterFunc(&e.funcs.createSessionOptions, e.api.CreateSessionOptions)
 	purego.RegisterFunc(&e.funcs.setIntraOpNumThreads, e.api.SetIntraOpNumThreads)
-	purego.RegisterFunc(&e.funcs.sessionOptionsAppendExecutionProvider, e.api.SessionOptionsAppendExecutionProvider)
 	purego.RegisterFunc(&e.funcs.releaseSessionOptions, e.api.ReleaseSessionOptions)
 	purego.RegisterFunc(&e.funcs.enableCpuMemArena, e.api.EnableCpuMemArena)
 	purego.RegisterFunc(&e.funcs.disableCpuMemArena, e.api.DisableCpuMemArena)
@@ -163,13 +169,11 @@ func (e *Engine) initApi() error {
 
 	// tensor, value
 	purego.RegisterFunc(&e.funcs.createTensorWithDataAsOrtValue, e.api.CreateTensorWithDataAsOrtValue)
-	purego.RegisterFunc(&e.funcs.getValueType, e.api.GetValueType)
 	purego.RegisterFunc(&e.funcs.getTensorMutableData, e.api.GetTensorMutableData)
 	purego.RegisterFunc(&e.funcs.getTensorTypeAndShape, e.api.GetTensorTypeAndShape)
 	purego.RegisterFunc(&e.funcs.getTensorElementType, e.api.GetTensorElementType)
 	purego.RegisterFunc(&e.funcs.getDimensionsCount, e.api.GetDimensionsCount)
 	purego.RegisterFunc(&e.funcs.getDimensions, e.api.GetDimensions)
-	purego.RegisterFunc(&e.funcs.getTensorShapeElementCount, e.api.GetTensorShapeElementCount)
 	purego.RegisterFunc(&e.funcs.releaseValue, e.api.ReleaseValue)
 	purego.RegisterFunc(&e.funcs.releaseTensorTypeAndShapeInfo, e.api.ReleaseTensorTypeAndShapeInfo)
 
@@ -181,11 +185,7 @@ func (e *Engine) initApi() error {
 }
 
 func (e *Engine) initEnv(name string) error {
-	namePtr, err := stringToCString(name)
-	if err != nil {
-		return err
-	}
-	status := e.funcs.createEnv(LogError, namePtr, &e.envHandle)
+	status := e.funcs.createEnv(LogError, cString(name), &e.envHandle)
 	if err := e.checkStatus(status); err != nil {
 		return fmt.Errorf("failed to create env: %w", err)
 	}
@@ -216,7 +216,8 @@ func (e *Engine) GetVersion() string {
 // # Example:
 //
 //	opts, _ := engine.NewSessionOptions()
-//	for _, p := range engine.GetAvailableProviders() {
+//	providers, _ := engine.GetAvailableProviders()
+//	for _, p := range providers {
 //		if p == "CUDAExecutionProvider" {
 //			opts.EnableCUDA(nil)
 //		}
@@ -224,7 +225,7 @@ func (e *Engine) GetVersion() string {
 //
 // # Returns:
 //
-//	[]string: 名称列表；查询失败时为 nil。目前 onnxruntime 支持的 EP 有：
+//	[]string: 名称列表。目前 onnxruntime 支持的 EP 有：
 //	  CPUExecutionProvider         CPU，内置，始终存在
 //	  AzureExecutionProvider       Azure
 //	  CUDAExecutionProvider        NVIDIA CUDA
@@ -251,19 +252,19 @@ func (e *Engine) GetVersion() string {
 //	  TvmExecutionProvider         Apache TVM
 //
 // 具体返回范围取决于编译时启用的 EP，不同平台结果可能不同。
-func (e *Engine) GetAvailableProviders() []string {
+func (e *Engine) GetAvailableProviders() ([]string, error) {
 	var providers **byte
 	var count int32
 	if err := e.checkStatus(e.funcs.getAvailableProviders(&providers, &count)); err != nil {
-		return nil
+		return nil, err
 	}
 	defer e.funcs.releaseAvailableProviders(providers, count)
 
-	names := make([]string, 0, count)
-	for _, p := range unsafe.Slice(providers, count) {
-		names = append(names, cStringToString(p))
+	names := make([]string, count)
+	for i, p := range unsafe.Slice(providers, count) {
+		names[i] = goString(p)
 	}
-	return names
+	return names, nil
 }
 
 // cleanup 释放 env / memory info，可重复调用
@@ -278,18 +279,18 @@ func (e *Engine) cleanup() {
 	}
 }
 
-// Destroy 释放资源
+// Close 释放 Engine 持有的 env 与 memory info
 //
-// 调用顺序：session 由 env 创建并引用 env，必须先释放所有 Session（及由它们产出的 Value），
+// 调用顺序：Session 由 env 创建并引用 env，必须先释放所有 Session（及由它们产出的 Value），
 // 再调用本方法。例如：
 //
 //	engine, _ := ort.NewEngine(ort.DefaultLibraryPath())
-//	defer engine.Destroy() // 最先 defer，最后执行
+//	defer engine.Close() // 最先 defer，最后执行
 //	session, _ := engine.NewSession("model.onnx", nil)
-//	defer session.Destroy()
+//	defer session.Close()
 //
-// Destroy 之后包级 NewTensor 会返回 "engine not initialized"，不会再访问已释放的句柄。
-func (e *Engine) Destroy() {
+// Close 之后包级 NewTensor 会返回 "engine not initialized"，不会再访问已释放的句柄。
+func (e *Engine) Close() {
 	e.cleanup()
 
 	// 避免 defaultEngine 悬垂：否则后续 NewTensor 会把已释放的 MemoryInfoHandle 交给 ORT
@@ -311,7 +312,7 @@ func (e *Engine) checkStatus(status StatusHandle) error {
 
 	code := e.funcs.getErrorCode(status)
 	msgPtr := e.funcs.getErrorMessage(status)
-	msg := cStringToString((*byte)(msgPtr))
+	msg := goString((*byte)(msgPtr))
 
 	return fmt.Errorf("onnxruntime error [code %d]: %s", code, msg)
 }

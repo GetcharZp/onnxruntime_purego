@@ -3,7 +3,6 @@ package ort
 import (
 	"testing"
 
-	"github.com/up-zero/gotool"
 	"github.com/up-zero/gotool/testutil"
 )
 
@@ -18,7 +17,7 @@ func mustShape(t *testing.T, v *Value) []int64 {
 }
 
 // mustElementCount 获取元素总数并断言成功
-func mustElementCount(t *testing.T, v *Value) int {
+func mustElementCount(t *testing.T, v *Value) int64 {
 	t.Helper()
 
 	count, err := v.GetElementCount()
@@ -28,31 +27,30 @@ func mustElementCount(t *testing.T, v *Value) int {
 }
 
 // newTestTensor 创建测试用 Tensor，并在测试结束后自动释放
-func newTestTensor(t *testing.T, shape []int64, data any) *Value {
+func newTestTensor[T TensorElement](t *testing.T, shape []int64, data []T) *Value {
 	t.Helper()
 
 	v, err := NewTensor(shape, data)
 	testutil.Equal(t, err, nil)
-	t.Cleanup(v.Destroy)
+	t.Cleanup(v.Close)
 
 	return v
 }
 
-// tensorTestCase 一组「输入数据 + 读回数据」的用例
+// tensorCase 生成一组「创建 Tensor -> 校验元信息 -> 读回数据」的用例
 //
-// get 使用泛型函数包装，避免用 any 做类型断言掩盖真实的类型不匹配
-type tensorTestCase struct {
-	data any
-	get  func(*Value) (any, error)
-	want any
-}
+// want 需独立于 data（否则比较退化为恒等）
+func tensorCase[T TensorElement](data, want []T) func(*testing.T) {
+	return func(t *testing.T) {
+		shape := []int64{1, int64(len(data))}
+		v := newTestTensor(t, shape, data)
 
-// tensorCase 构造 tensorTestCase，want 需独立于 data（否则比较退化为恒等）
-func tensorCase[T gotool.Number](data, want []T) tensorTestCase {
-	return tensorTestCase{
-		data: data,
-		get:  func(v *Value) (any, error) { return GetTensorData[T](v) },
-		want: want,
+		testutil.Equal(t, mustShape(t, v), shape)
+		testutil.Equal(t, mustElementCount(t, v), int64(len(data)))
+
+		got, err := GetTensorData[T](v)
+		testutil.Equal(t, err, nil)
+		testutil.Equal(t, got, want)
 	}
 }
 
@@ -73,7 +71,7 @@ func TestValue_GetShape_Scalar(t *testing.T) {
 	v := newTestTensor(t, []int64{}, []float32{42})
 
 	testutil.Equal(t, mustShape(t, v), []int64{})
-	testutil.Equal(t, mustElementCount(t, v), 1)
+	testutil.Equal(t, mustElementCount(t, v), int64(1))
 }
 
 func TestValue_GetElementCount(t *testing.T) {
@@ -81,9 +79,9 @@ func TestValue_GetElementCount(t *testing.T) {
 
 	v := newTestTensor(t, []int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
 
-	testutil.Equal(t, mustElementCount(t, v), 6)
+	testutil.Equal(t, mustElementCount(t, v), int64(6))
 	// 二次读取命中缓存，结果需保持一致
-	testutil.Equal(t, mustElementCount(t, v), 6)
+	testutil.Equal(t, mustElementCount(t, v), int64(6))
 	testutil.Equal(t, len(mustShape(t, v)), 3)
 	// 元素总数与数据长度一致
 	got, err := GetTensorData[float32](v)
@@ -91,25 +89,24 @@ func TestValue_GetElementCount(t *testing.T) {
 	testutil.Equal(t, len(got), 6)
 }
 
-func TestValue_Destroy(t *testing.T) {
+func TestValue_Close(t *testing.T) {
 	newTestEngine(t)
 
 	v := newTestTensor(t, []int64{1, 1, 6}, []float32{1, 2, 3, 4, 5, 6})
 
-	v.Destroy()
+	v.Close()
 	testutil.Equal(t, v.handle, ValueHandle(0))
 
 	// 重复释放不应 panic
-	v.Destroy()
+	v.Close()
 }
 
 func TestNewTensor_AllTypes(t *testing.T) {
 	newTestEngine(t)
 
-	const elementCount = 3
 	cases := []struct {
 		name string
-		tensorTestCase
+		run  func(*testing.T)
 	}{
 		{"float32", tensorCase([]float32{1, -2, 3.5}, []float32{1, -2, 3.5})},
 		{"float64", tensorCase([]float64{1, -2, 3.5}, []float64{1, -2, 3.5})},
@@ -121,31 +118,12 @@ func TestNewTensor_AllTypes(t *testing.T) {
 		{"uint32", tensorCase([]uint32{1, 2, 3}, []uint32{1, 2, 3})},
 		{"uint16", tensorCase([]uint16{1, 2, 3}, []uint16{1, 2, 3})},
 		{"uint8", tensorCase([]uint8{1, 2, 3}, []uint8{1, 2, 3})},
+		{"bool", tensorCase([]bool{true, false, true}, []bool{true, false, true})},
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			v := newTestTensor(t, []int64{1, elementCount}, tc.data)
-
-			testutil.Equal(t, mustShape(t, v), []int64{1, elementCount})
-			testutil.Equal(t, mustElementCount(t, v), elementCount)
-
-			got, err := tc.get(v)
-			testutil.Equal(t, err, nil)
-			testutil.Equal(t, got, tc.want)
-		})
+		t.Run(tc.name, tc.run)
 	}
-}
-
-// TestNewTensor_Bool NewTensor 支持 []bool，但 GetTensorData 的类型约束为 gotool.Number
-// （不含 bool），无法读回，这里只校验创建与元信息
-func TestNewTensor_Bool(t *testing.T) {
-	newTestEngine(t)
-
-	v := newTestTensor(t, []int64{1, 3}, []bool{true, false, true})
-
-	testutil.Equal(t, mustShape(t, v), []int64{1, 3})
-	testutil.Equal(t, mustElementCount(t, v), 3)
 }
 
 func TestNewTensor_DoesNotCopyData(t *testing.T) {
@@ -176,14 +154,6 @@ func TestNewTensor_NegativeDim(t *testing.T) {
 
 	// 动态维度(-1)时由 onnxruntime 而非包内校验报错
 	v, err := NewTensor([]int64{-1, 3}, []float32{1, 2, 3})
-	testutil.NotEqual(t, err, nil)
-	testutil.Equal(t, v, (*Value)(nil))
-}
-
-func TestNewTensor_UnsupportedType(t *testing.T) {
-	newTestEngine(t)
-
-	v, err := NewTensor([]int64{1, 2}, []string{"a", "b"})
 	testutil.NotEqual(t, err, nil)
 	testutil.Equal(t, v, (*Value)(nil))
 }

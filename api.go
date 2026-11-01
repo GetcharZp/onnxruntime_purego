@@ -434,7 +434,7 @@ type ortApi struct {
 	KernelContext_GetSyncStream                         uintptr // 423
 }
 
-// OrtStatus is an opaque pointer to an ONNX Runtime status object.
+// onnxruntime 不透明句柄与枚举类型，与 C API 的 Ort* 类型一一对应
 type (
 	StatusHandle                    uintptr
 	EnvHandle                       uintptr
@@ -450,7 +450,6 @@ type (
 	TensorRTProviderOptionsV2Handle uintptr
 	ErrorCode                       int32
 	LoggingLevel                    int32
-	OnnxType                        int32
 	TensorElementDataType           int32
 	AllocatorType                   int32
 	MemType                         int32
@@ -498,7 +497,6 @@ type apiFuncs struct {
 	getVersionString func() string
 
 	// status, error
-	createStatus    func(ErrorCode, *byte) StatusHandle
 	getErrorCode    func(StatusHandle) ErrorCode
 	getErrorMessage func(StatusHandle) unsafe.Pointer
 	releaseStatus   func(StatusHandle)
@@ -528,14 +526,13 @@ type apiFuncs struct {
 	appendExecutionProvider_TensorRT_V2 func(SessionOptionsHandle, TensorRTProviderOptionsV2Handle) StatusHandle
 
 	// session options
-	createSessionOptions                  func(*SessionOptionsHandle) StatusHandle
-	setIntraOpNumThreads                  func(SessionOptionsHandle, int32) StatusHandle
-	sessionOptionsAppendExecutionProvider func(SessionOptionsHandle, *byte, **byte, **byte, uintptr) StatusHandle
-	releaseSessionOptions                 func(SessionOptionsHandle)
-	enableCpuMemArena                     func(SessionOptionsHandle) StatusHandle
-	disableCpuMemArena                    func(SessionOptionsHandle) StatusHandle
-	addFreeDimensionOverride              func(SessionOptionsHandle, *byte, int64) StatusHandle
-	addFreeDimensionOverrideByName        func(SessionOptionsHandle, *byte, int64) StatusHandle
+	createSessionOptions           func(*SessionOptionsHandle) StatusHandle
+	setIntraOpNumThreads           func(SessionOptionsHandle, int32) StatusHandle
+	releaseSessionOptions          func(SessionOptionsHandle)
+	enableCpuMemArena              func(SessionOptionsHandle) StatusHandle
+	disableCpuMemArena             func(SessionOptionsHandle) StatusHandle
+	addFreeDimensionOverride       func(SessionOptionsHandle, *byte, int64) StatusHandle
+	addFreeDimensionOverrideByName func(SessionOptionsHandle, *byte, int64) StatusHandle
 
 	// session
 	createSession            func(EnvHandle, unsafe.Pointer, SessionOptionsHandle, *SessionHandle) StatusHandle
@@ -549,18 +546,15 @@ type apiFuncs struct {
 	castTypeInfoToTensorInfo func(TypeInfoHandle, *TensorTypeAndShapeInfoHandle) StatusHandle
 	releaseTypeInfo          func(TypeInfoHandle)
 	run                      func(SessionHandle, uintptr, *unsafe.Pointer, *ValueHandle, uintptr, *unsafe.Pointer, uintptr, *ValueHandle) StatusHandle
-	//run                    func(SessionHandle, uintptr, **byte, *ValueHandle, uintptr, **byte, uintptr, *ValueHandle) StatusHandle
-	releaseSession func(SessionHandle)
+	releaseSession           func(SessionHandle)
 
 	// tensor, value
 	createTensorWithDataAsOrtValue func(MemoryInfoHandle, unsafe.Pointer, uintptr, *int64, uintptr, TensorElementDataType, *ValueHandle) StatusHandle
-	getValueType                   func(ValueHandle, *OnnxType) StatusHandle
 	getTensorMutableData           func(ValueHandle, *unsafe.Pointer) StatusHandle
 	getTensorTypeAndShape          func(ValueHandle, *TensorTypeAndShapeInfoHandle) StatusHandle
 	getTensorElementType           func(TensorTypeAndShapeInfoHandle, *TensorElementDataType) StatusHandle
 	getDimensionsCount             func(TensorTypeAndShapeInfoHandle, *uintptr) StatusHandle
 	getDimensions                  func(TensorTypeAndShapeInfoHandle, *int64, uintptr) StatusHandle
-	getTensorShapeElementCount     func(TensorTypeAndShapeInfoHandle, *uintptr) StatusHandle
 	releaseValue                   func(ValueHandle)
 	releaseTensorTypeAndShapeInfo  func(TensorTypeAndShapeInfoHandle)
 

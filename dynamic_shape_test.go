@@ -14,17 +14,17 @@ func TestSessionOptions_AddFreeDimensionOverrideByName(t *testing.T) {
 	// 未覆盖时，动态维以 -1 呈现
 	base, err := engine.NewSessionFromBytes(model, nil)
 	testutil.Equal(t, err, nil)
-	defer base.Destroy()
+	defer base.Close()
 	testutil.Equal(t, base.Inputs[0].Shape, []int64{-1, 3})
 
 	opts, err := engine.NewSessionOptions()
 	testutil.Equal(t, err, nil)
-	defer opts.Destroy()
+	defer opts.Close()
 	testutil.Equal(t, opts.AddFreeDimensionOverrideByName("batch", 1), nil)
 
 	session, err := engine.NewSessionFromBytes(model, opts)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	// 覆盖后动态维固定为 1，ElementCount 随之可计算
 	testutil.Equal(t, session.Inputs[0].Shape, []int64{1, 3})
@@ -39,12 +39,12 @@ func TestSessionOptions_AddFreeDimensionOverride(t *testing.T) {
 
 	opts, err := engine.NewSessionOptions()
 	testutil.Equal(t, err, nil)
-	defer opts.Destroy()
+	defer opts.Close()
 	testutil.Equal(t, opts.AddFreeDimensionOverride("DATA_BATCH", 5), nil)
 
 	session, err := engine.NewSessionFromBytes(dynamicONNX(), opts)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 	testutil.Equal(t, session.Inputs[0].Shape, []int64{5, 3})
 }
 

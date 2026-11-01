@@ -4,24 +4,32 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
-
-	"github.com/up-zero/gotool"
 )
 
+// TensorElement 是 NewTensor / GetTensorData 支持的元素类型。
+//
+// 仅接受下列内置类型本身，命名类型（如 type Score float32）需转换后再传入。
+type TensorElement interface {
+	float32 | float64 | int8 | int16 | int32 | int64 |
+		uint8 | uint16 | uint32 | uint64 | bool
+}
+
+// Value 表示一个输入 / 输出张量，用完后需调用 Close
 type Value struct {
-	handle       ValueHandle
-	engine       *Engine
-	shape        []int64
-	elementCount int
+	handle ValueHandle
+	engine *Engine
 
 	// data 持有传给 CreateTensorWithDataAsOrtValue 的底层数据引用。
 	//
 	// onnxruntime 只保存指针、不拷贝数据，若不在此保留引用，NewTensor 返回后
 	// 该缓冲区即不可达，GC 会回收并复用，而 ORT 仍按原指针读取。
 	data any
+
+	dataType TensorElementDataType // 首次调用 info 时填充
+	shape    []int64               // 同上；非 nil 表示已加载
 }
 
-// NewTensor 初始化 Tensor
+// NewTensor 创建输入 Tensor
 //
 // # Params:
 //
@@ -30,41 +38,70 @@ type Value struct {
 //	      []uint64 / []uint32 / []uint16 / []uint8 / []bool
 //
 // onnxruntime 不会拷贝 data，只持有其指针，数据有效性由返回的 Value 托管。
-// 因此复用同一个切片会同步影响已创建的 Tensor；调用 Value.Destroy() 后，
+// 因此复用同一个切片会同步影响已创建的 Tensor；调用 Value.Close() 后，
 // 由 GetTensorData 取到的切片随之失效。
-func NewTensor(shape []int64, data any) (*Value, error) {
+func NewTensor[T TensorElement](shape []int64, data []T) (*Value, error) {
 	engine := getDefaultEngine()
 	if engine == nil {
 		return nil, fmt.Errorf("engine not initialized")
 	}
 
-	dataType, typeSize, dataLen, dataPtr, err := parseInputData(data)
-	if err != nil {
-		return nil, err
-	}
+	dataType, elemSize := tensorType[T]()
 
 	// 元素个数由 shape 决定，而 onnxruntime 并不校验缓冲区长度，数据不足会越界读，
 	// 这里提前拦截。shape 含动态维度(-1)或乘积溢出时交由 onnxruntime 报错。
-	if want, ok := shapeElementCount(shape); ok && int64(dataLen) < want {
-		return nil, fmt.Errorf("data length %d is less than the %d elements required by shape %v", dataLen, want, shape)
+	if want, ok := shapeElementCount(shape); ok && int64(len(data)) < want {
+		return nil, fmt.Errorf("data length %d is less than the %d elements required by shape %v", len(data), want, shape)
 	}
 
 	// 创建 Value 句柄
-	var valHandle ValueHandle
+	var handle ValueHandle
 	status := engine.funcs.createTensorWithDataAsOrtValue(
 		engine.memInfo,
-		dataPtr,
-		uintptr(dataLen)*typeSize,
+		unsafe.Pointer(slicePtr(data)),
+		uintptr(len(data))*elemSize,
 		slicePtr(shape),
 		uintptr(len(shape)),
 		dataType,
-		&valHandle,
+		&handle,
 	)
 	if err := engine.checkStatus(status); err != nil {
 		return nil, err
 	}
 
-	return &Value{handle: valHandle, engine: engine, data: data}, nil
+	return &Value{handle: handle, engine: engine, data: data}, nil
+}
+
+// tensorType 返回 T 对应的 onnxruntime 元素类型与单元素字节数
+func tensorType[T TensorElement]() (TensorElementDataType, uintptr) {
+	var zero T
+	switch any(zero).(type) {
+	case float32:
+		return TensorElementDataTypeFloat, 4
+	case float64:
+		return TensorElementDataTypeDouble, 8
+	case int8:
+		return TensorElementDataTypeInt8, 1
+	case int16:
+		return TensorElementDataTypeInt16, 2
+	case int32:
+		return TensorElementDataTypeInt32, 4
+	case int64:
+		return TensorElementDataTypeInt64, 8
+	case uint8:
+		return TensorElementDataTypeUint8, 1
+	case uint16:
+		return TensorElementDataTypeUint16, 2
+	case uint32:
+		return TensorElementDataTypeUint32, 4
+	case uint64:
+		return TensorElementDataTypeUint64, 8
+	case bool:
+		return TensorElementDataTypeBool, 1
+	default:
+		// TensorElement 已穷举所有类型，本分支不可达
+		panic(fmt.Sprintf("ort: unsupported tensor element type %T", zero))
+	}
 }
 
 // shapeElementCount 计算 shape 的元素总数。
@@ -85,171 +122,88 @@ func shapeElementCount(shape []int64) (int64, bool) {
 //
 // 返回的是内部缓存切片本身，调用方不应修改其内容。
 func (v *Value) GetShape() ([]int64, error) {
-	if v.shape != nil {
-		return v.shape, nil
-	}
-
-	info, err := v.getTypeAndShapeInfo()
-	if err != nil {
-		return nil, err
-	}
-	defer v.engine.funcs.releaseTensorTypeAndShapeInfo(info)
-
-	var dimCount uintptr
-	status := v.engine.funcs.getDimensionsCount(info, &dimCount)
-	if err := v.engine.checkStatus(status); err != nil {
-		return nil, fmt.Errorf("failed to get dimensions count: %w", err)
-	}
-
-	// 标量张量的 dimCount 为 0，此时不能取 &v.shape[0]
-	v.shape = make([]int64, dimCount)
-	if dimCount > 0 {
-		status = v.engine.funcs.getDimensions(info, &v.shape[0], dimCount)
-		if err := v.engine.checkStatus(status); err != nil {
-			return nil, fmt.Errorf("failed to get dimensions: %w", err)
-		}
-	}
-
-	return v.shape, nil
+	_, shape, err := v.info()
+	return shape, err
 }
 
 // GetElementCount 获取 Tensor 中的元素总数
-func (v *Value) GetElementCount() (int, error) {
-	if v.elementCount > 0 {
-		return v.elementCount, nil
-	}
-
-	info, err := v.getTypeAndShapeInfo()
+func (v *Value) GetElementCount() (int64, error) {
+	_, shape, err := v.info()
 	if err != nil {
 		return 0, err
 	}
-	defer v.engine.funcs.releaseTensorTypeAndShapeInfo(info)
-
-	var elementCount uintptr
-	status := v.engine.funcs.getTensorShapeElementCount(info, &elementCount)
-	if err := v.engine.checkStatus(status); err != nil {
-		return 0, fmt.Errorf("failed to get tensor shape element count: %w", err)
+	count, ok := shapeElementCount(shape)
+	if !ok {
+		return 0, fmt.Errorf("tensor has a dynamic shape %v", shape)
 	}
-
-	v.elementCount = int(elementCount)
-	return v.elementCount, nil
+	return count, nil
 }
 
 // GetTensorData 获取 Tensor 数据
-func GetTensorData[T gotool.Number](v *Value) ([]T, error) {
-	elementCount, err := v.GetElementCount()
+//
+// 返回的切片直接指向 onnxruntime 管理的内存，不发生拷贝，Value.Close() 后失效。
+func GetTensorData[T TensorElement](v *Value) ([]T, error) {
+	dataType, shape, err := v.info()
 	if err != nil {
 		return nil, err
 	}
 
-	info, err := v.getTypeAndShapeInfo()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tensor type and shape info: %w", err)
+	if want, _ := tensorType[T](); dataType != want {
+		var zero T
+		return nil, fmt.Errorf("tensor element type mismatch: onnxruntime type %d does not match requested %T", dataType, zero)
 	}
-	defer v.engine.funcs.releaseTensorTypeAndShapeInfo(info)
 
-	var dataType TensorElementDataType
-	status := v.engine.funcs.getTensorElementType(info, &dataType)
-	if err := v.engine.checkStatus(status); err != nil {
-		return nil, fmt.Errorf("failed to get tensor element type: %w", err)
+	count, ok := shapeElementCount(shape)
+	if !ok {
+		return nil, fmt.Errorf("tensor has a dynamic shape %v", shape)
 	}
 
 	var ptr unsafe.Pointer
-	status = v.engine.funcs.getTensorMutableData(v.handle, &ptr)
-	if err := v.engine.checkStatus(status); err != nil {
-		return nil, fmt.Errorf("failed to get tensor mutable data: %w", err)
+	if err := v.engine.checkStatus(v.engine.funcs.getTensorMutableData(v.handle, &ptr)); err != nil {
+		return nil, fmt.Errorf("failed to get tensor data: %w", err)
 	}
 
-	var rawData any
-	switch dataType {
-	case TensorElementDataTypeFloat:
-		rawData = unsafe.Slice((*float32)(ptr), elementCount)
-	case TensorElementDataTypeDouble:
-		rawData = unsafe.Slice((*float64)(ptr), elementCount)
-	case TensorElementDataTypeInt64:
-		rawData = unsafe.Slice((*int64)(ptr), elementCount)
-	case TensorElementDataTypeInt32:
-		rawData = unsafe.Slice((*int32)(ptr), elementCount)
-	case TensorElementDataTypeInt16:
-		rawData = unsafe.Slice((*int16)(ptr), elementCount)
-	case TensorElementDataTypeInt8:
-		rawData = unsafe.Slice((*int8)(ptr), elementCount)
-	case TensorElementDataTypeUint64:
-		rawData = unsafe.Slice((*uint64)(ptr), elementCount)
-	case TensorElementDataTypeUint32:
-		rawData = unsafe.Slice((*uint32)(ptr), elementCount)
-	case TensorElementDataTypeUint16:
-		rawData = unsafe.Slice((*uint16)(ptr), elementCount)
-	case TensorElementDataTypeUint8:
-		rawData = unsafe.Slice((*uint8)(ptr), elementCount)
-	case TensorElementDataTypeBool:
-		rawData = unsafe.Slice((*bool)(ptr), elementCount)
-
-	default:
-		return nil, fmt.Errorf("unsupported tensor element type: %d", dataType)
-	}
-
-	// 类型断言
-	if data, ok := rawData.([]T); ok {
-		return data, nil
-	}
-
-	var t T
-	return nil, fmt.Errorf("tensor data type mismatch: actual ORT type %d does not match requested Go type %T", dataType, t)
+	return unsafe.Slice((*T)(ptr), int(count)), nil
 }
 
-func (v *Value) getTypeAndShapeInfo() (TensorTypeAndShapeInfoHandle, error) {
+// info 获取并缓存 Tensor 的元素类型与形状，供 GetShape / GetElementCount / GetTensorData 复用，
+// 保证每个 Value 最多只调用一次 GetTensorTypeAndShape。
+func (v *Value) info() (TensorElementDataType, []int64, error) {
+	if v.shape != nil {
+		return v.dataType, v.shape, nil
+	}
+
+	f := v.engine.funcs
 	var info TensorTypeAndShapeInfoHandle
-	status := v.engine.funcs.getTensorTypeAndShape(v.handle, &info)
-	if err := v.engine.checkStatus(status); err != nil {
-		return 0, err
+	if err := v.engine.checkStatus(f.getTensorTypeAndShape(v.handle, &info)); err != nil {
+		return 0, nil, fmt.Errorf("failed to get tensor type and shape: %w", err)
 	}
-	return info, nil
+	defer f.releaseTensorTypeAndShapeInfo(info)
+
+	var dataType TensorElementDataType
+	if err := v.engine.checkStatus(f.getTensorElementType(info, &dataType)); err != nil {
+		return 0, nil, fmt.Errorf("failed to get tensor element type: %w", err)
+	}
+
+	var dimCount uintptr
+	if err := v.engine.checkStatus(f.getDimensionsCount(info, &dimCount)); err != nil {
+		return 0, nil, fmt.Errorf("failed to get dimensions count: %w", err)
+	}
+
+	// 标量张量的 dimCount 为 0，此时不能取 &shape[0]；make 得到的是非 nil 空切片
+	shape := make([]int64, dimCount)
+	if dimCount > 0 {
+		if err := v.engine.checkStatus(f.getDimensions(info, &shape[0], dimCount)); err != nil {
+			return 0, nil, fmt.Errorf("failed to get dimensions: %w", err)
+		}
+	}
+
+	v.dataType, v.shape = dataType, shape
+	return dataType, shape, nil
 }
 
-// parseInputData 解析输入数据
-//
-// # Params:
-//
-//	data: 输入数据
-//
-// # Returns:
-//
-//	dataType: 数据类型
-//	uintptr: 单条元素的字节数
-//	int: 数据长度
-//	unsafe.Pointer: 数据指针
-//	error: 错误信息
-func parseInputData(data any) (TensorElementDataType, uintptr, int, unsafe.Pointer, error) {
-	switch d := data.(type) {
-	case []float32:
-		return TensorElementDataTypeFloat, 4, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []float64:
-		return TensorElementDataTypeDouble, 8, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []int64:
-		return TensorElementDataTypeInt64, 8, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []int32:
-		return TensorElementDataTypeInt32, 4, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []int16:
-		return TensorElementDataTypeInt16, 2, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []int8:
-		return TensorElementDataTypeInt8, 1, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []uint64:
-		return TensorElementDataTypeUint64, 8, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []uint32:
-		return TensorElementDataTypeUint32, 4, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []uint16:
-		return TensorElementDataTypeUint16, 2, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []uint8:
-		return TensorElementDataTypeUint8, 1, len(d), unsafe.Pointer(slicePtr(d)), nil
-	case []bool:
-		return TensorElementDataTypeBool, 1, len(d), unsafe.Pointer(slicePtr(d)), nil
-	default:
-		return TensorElementDataTypeUndefined, 0, 0, nil, fmt.Errorf("unsupported input type: %T", data)
-	}
-}
-
-func (v *Value) Destroy() {
+// Close 释放 Tensor
+func (v *Value) Close() {
 	if v.handle != 0 {
 		v.engine.funcs.releaseValue(v.handle)
 		v.handle = 0

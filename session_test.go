@@ -28,7 +28,7 @@ func newTestSession(t *testing.T, opts *SessionOptions) *Session {
 	engine := newTestEngine(t)
 	session, err := engine.NewSession(testModelPath, opts)
 	testutil.Equal(t, err, nil)
-	t.Cleanup(session.Destroy)
+	t.Cleanup(session.Close)
 
 	return session
 }
@@ -38,22 +38,18 @@ func TestEngine_NewSession(t *testing.T) {
 
 	option, err := engine.NewSessionOptions()
 	testutil.Equal(t, err, nil)
-	defer option.Destroy()
+	defer option.Close()
 
 	testutil.Equal(t, option.SetIntraOpNumThreads(1), nil)
-	testutil.Equal(t, option.SetCpuMemArena(true), nil)
+	testutil.Equal(t, option.SetCPUMemArena(true), nil)
 
 	session, err := engine.NewSession(testModelPath, option)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	testutil.NotEqual(t, session.handle, SessionHandle(0))
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
-
-	// 弃用字段需保持可用，直至正式移除
-	testutil.Equal(t, session.InputNames, []string{testInputName})
-	testutil.Equal(t, session.OutputNames, []string{testOutputName})
 }
 
 func TestEngine_NewSession_WithoutOptions(t *testing.T) {
@@ -61,7 +57,7 @@ func TestEngine_NewSession_WithoutOptions(t *testing.T) {
 
 	session, err := engine.NewSession(testModelPath, nil)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
@@ -75,7 +71,7 @@ func TestEngine_NewSessionFromBytes(t *testing.T) {
 
 	session, err := engine.NewSessionFromBytes(modelData, nil)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 	testutil.Equal(t, session.Outputs[0].Name, testOutputName)
@@ -89,17 +85,17 @@ func TestEngine_NewSessionFromBytes_Run(t *testing.T) {
 
 	session, err := engine.NewSessionFromBytes(modelData, nil)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	inputValue, err := NewTensor([]int64{1, testChannels, testHeight, testWidth}, make([]float32, testChannels*testHeight*testWidth))
 	testutil.Equal(t, err, nil)
-	defer inputValue.Destroy()
+	defer inputValue.Close()
 
 	outputs, err := session.Run(map[string]*Value{testInputName: inputValue})
 	testutil.Equal(t, err, nil)
 	defer func() {
 		for _, output := range outputs {
-			output.Destroy()
+			output.Close()
 		}
 	}()
 
@@ -150,14 +146,14 @@ func TestEngine_NewSession_ModelNotFound(t *testing.T) {
 	testutil.Equal(t, session, (*Session)(nil))
 }
 
-func TestSession_Destroy(t *testing.T) {
+func TestSession_Close(t *testing.T) {
 	session := newTestSession(t, nil)
 
-	session.Destroy()
+	session.Close()
 	testutil.Equal(t, session.handle, SessionHandle(0))
 
 	// 重复释放不应 panic
-	session.Destroy()
+	session.Close()
 }
 
 func TestSessionOptions(t *testing.T) {
@@ -168,14 +164,14 @@ func TestSessionOptions(t *testing.T) {
 
 	testutil.Equal(t, opts.SetIntraOpNumThreads(2), nil)
 	// 内存池的开启 / 关闭两条分支都应调用成功
-	testutil.Equal(t, opts.SetCpuMemArena(true), nil)
-	testutil.Equal(t, opts.SetCpuMemArena(false), nil)
+	testutil.Equal(t, opts.SetCPUMemArena(true), nil)
+	testutil.Equal(t, opts.SetCPUMemArena(false), nil)
 
-	opts.Destroy()
+	opts.Close()
 	testutil.Equal(t, opts.handle, SessionOptionsHandle(0))
 
 	// 重复释放不应 panic
-	opts.Destroy()
+	opts.Close()
 }
 
 func TestSessionOptions_EnableCUDA(t *testing.T) {
@@ -183,10 +179,10 @@ func TestSessionOptions_EnableCUDA(t *testing.T) {
 
 	opts, err := engine.NewSessionOptions()
 	testutil.Equal(t, err, nil)
-	defer opts.Destroy()
+	defer opts.Close()
 
 	// 无 CUDA 环境的机器上 onnxruntime 会返回错误，此处只验证调用链不 panic。
-	// 生产环境可结合 availableProvider 判断是否具备 CUDA。
+	// 生产环境可结合 GetAvailableProviders 判断是否具备 CUDA。
 	if err := opts.EnableCUDA(map[string]string{"device_id": "0"}); err != nil {
 		t.Logf("CUDA provider unavailable: %v", err)
 	}
@@ -197,7 +193,7 @@ func TestSessionOptions_EnableTensorRT(t *testing.T) {
 
 	opts, err := engine.NewSessionOptions()
 	testutil.Equal(t, err, nil)
-	defer opts.Destroy()
+	defer opts.Close()
 
 	if err := opts.EnableTensorRT(map[string]string{"trt_fp16_enable": "1"}); err != nil {
 		t.Logf("TensorRT provider unavailable: %v", err)
@@ -207,7 +203,7 @@ func TestSessionOptions_EnableTensorRT(t *testing.T) {
 	// 启用成功后应能正常构建 Session
 	session, err := engine.NewSession(testModelPath, opts)
 	testutil.Equal(t, err, nil)
-	defer session.Destroy()
+	defer session.Close()
 
 	testutil.Equal(t, session.Inputs[0].Name, testInputName)
 }
@@ -222,13 +218,13 @@ func TestSession_Run(t *testing.T) {
 
 	inputValue, err := NewTensor([]int64{1, testChannels, testHeight, testWidth}, inputData)
 	testutil.Equal(t, err, nil)
-	defer inputValue.Destroy()
+	defer inputValue.Close()
 
 	outputs, err := session.Run(map[string]*Value{testInputName: inputValue})
 	testutil.Equal(t, err, nil)
 	defer func() {
 		for _, output := range outputs {
-			output.Destroy()
+			output.Close()
 		}
 	}()
 
@@ -238,7 +234,7 @@ func TestSession_Run(t *testing.T) {
 
 	// 输出形状固定为 [1, 84, 8400]
 	testutil.Equal(t, mustShape(t, output), []int64{1, testRows, testAnchors})
-	testutil.Equal(t, mustElementCount(t, output), testRows*testAnchors)
+	testutil.Equal(t, mustElementCount(t, output), int64(testRows*testAnchors))
 
 	data, err := GetTensorData[float32](output)
 	testutil.Equal(t, err, nil)
@@ -257,7 +253,7 @@ func TestSession_Run_Repeated(t *testing.T) {
 
 	inputValue, err := NewTensor([]int64{1, testChannels, testHeight, testWidth}, make([]float32, testChannels*testHeight*testWidth))
 	testutil.Equal(t, err, nil)
-	defer inputValue.Destroy()
+	defer inputValue.Close()
 
 	// 同一 Session 多次推理，输出 shape 应保持一致
 	for range 2 {
@@ -266,7 +262,7 @@ func TestSession_Run_Repeated(t *testing.T) {
 
 		testutil.Equal(t, mustShape(t, outputs[testOutputName]), []int64{1, testRows, testAnchors})
 		for _, output := range outputs {
-			output.Destroy()
+			output.Close()
 		}
 	}
 }
@@ -292,7 +288,7 @@ func TestSession_Run_UnknownInputName(t *testing.T) {
 
 	inputValue, err := NewTensor([]int64{1, testChannels, testHeight, testWidth}, make([]float32, testChannels*testHeight*testWidth))
 	testutil.Equal(t, err, nil)
-	defer inputValue.Destroy()
+	defer inputValue.Close()
 
 	outputs, err := session.Run(map[string]*Value{"not_a_input": inputValue})
 	testutil.NotEqual(t, err, nil)

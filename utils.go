@@ -49,24 +49,20 @@ func slicePtr[T any](s []T) *T {
 	return &s[0]
 }
 
-// stringToCString 将字符串转换为字节指针
-func stringToCString(s string) (*byte, error) {
+// cString 将 Go 字符串转换为以 '\0' 结尾的 C 字符串
+func cString(s string) *byte {
 	b := make([]byte, len(s)+1)
 	copy(b, s)
-	b[len(s)] = 0
-	return &b[0], nil
+	return &b[0]
 }
 
-// cStringToString 将字节指针转换为字符串
-func cStringToString(ptr *byte) string {
+// goString 将 C 字符串转换为 Go 字符串，nil 指针返回空串
+func goString(ptr *byte) string {
 	if ptr == nil {
 		return ""
 	}
-	var length int
-	for {
-		if *(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(ptr)) + uintptr(length))) == 0 {
-			break
-		}
+	length := 0
+	for *(*byte)(unsafe.Add(unsafe.Pointer(ptr), length)) != 0 {
 		length++
 	}
 	return string(unsafe.Slice(ptr, length))

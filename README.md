@@ -54,12 +54,12 @@ const testModelPath = "./testdata/yolo11n.onnx"
 
 func main() {
 	engine, _ := ort.NewEngine(ort.DefaultLibraryPath())
-	defer engine.Destroy()
+	defer engine.Close()
 	session, err := engine.NewSession(testModelPath, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer session.Destroy()
+	defer session.Close()
 
 	// Prepare the data from the model's own declaration
 	input := session.Inputs[0]
@@ -72,7 +72,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer inputValue.Destroy()
+	defer inputValue.Close()
 
 	outputs, err := session.Run(map[string]*ort.Value{input.Name: inputValue})
 	if err != nil {
@@ -80,7 +80,7 @@ func main() {
 	}
 
 	for name, output := range outputs {
-		defer output.Destroy()
+		defer output.Close()
 
 		outputData, err := ort.GetTensorData[float32](output)
 		if err != nil {
@@ -114,7 +114,7 @@ Models exported with dynamic dimensions report them as `-1`, which makes `Tensor
 
 ```go
 opts, _ := engine.NewSessionOptions()
-defer opts.Destroy()
+defer opts.Close()
 opts.AddFreeDimensionOverrideByName("batch", 1)
 
 session, _ := engine.NewSession("model.onnx", opts)
@@ -129,9 +129,13 @@ Check which execution providers the local onnxruntime build supports before enab
 
 ```go
 opts, _ := engine.NewSessionOptions()
-defer opts.Destroy()
+defer opts.Close()
 
-for _, p := range engine.GetAvailableProviders() {
+providers, err := engine.GetAvailableProviders()
+if err != nil {
+    log.Fatal(err)
+}
+for _, p := range providers {
     if p == "CUDAExecutionProvider" {
         opts.EnableCUDA(nil)
     }

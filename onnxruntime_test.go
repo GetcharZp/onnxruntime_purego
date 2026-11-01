@@ -16,7 +16,7 @@ func newTestEngine(t *testing.T) *Engine {
 
 	engine, err := NewEngine(DefaultLibraryPath())
 	testutil.Equal(t, err, nil)
-	t.Cleanup(engine.Destroy)
+	t.Cleanup(engine.Close)
 
 	return engine
 }
@@ -59,7 +59,8 @@ func TestEngine_GetVersion(t *testing.T) {
 func TestEngine_GetAvailableProviders(t *testing.T) {
 	engine := newTestEngine(t)
 
-	providers := engine.GetAvailableProviders()
+	providers, err := engine.GetAvailableProviders()
+	testutil.Equal(t, err, nil)
 
 	// CPUExecutionProvider 为 onnxruntime 内置，任何构建都应存在
 	testutil.Equal(t, slices.Contains(providers, "CPUExecutionProvider"), true)
@@ -71,13 +72,13 @@ func TestNewEngine_InvalidLibraryPath(t *testing.T) {
 	testutil.Equal(t, engine, (*Engine)(nil))
 }
 
-func TestEngine_Destroy(t *testing.T) {
+func TestEngine_Close(t *testing.T) {
 	engine, err := NewEngine(DefaultLibraryPath())
 	testutil.Equal(t, err, nil)
 	testutil.Equal(t, getDefaultEngine(), engine)
 
-	engine.Destroy()
-	// 避免 defaultEngine 悬垂：Destroy 后包级 NewTensor 必须报错，
+	engine.Close()
+	// 避免 defaultEngine 悬垂：Close 后包级 NewTensor 必须报错，
 	// 而不是把已释放的 MemoryInfoHandle 交给 onnxruntime
 	testutil.Equal(t, getDefaultEngine(), (*Engine)(nil))
 
@@ -85,5 +86,5 @@ func TestEngine_Destroy(t *testing.T) {
 	testutil.NotEqual(t, err, nil)
 
 	// 重复释放不应 panic
-	engine.Destroy()
+	engine.Close()
 }

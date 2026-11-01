@@ -3,7 +3,6 @@ package ort
 import (
 	"math"
 	"testing"
-	"unsafe"
 
 	"github.com/up-zero/gotool/testutil"
 )
@@ -17,29 +16,28 @@ func TestSlicePtr(t *testing.T) {
 	testutil.Equal(t, slicePtr[int](nil), (*int)(nil))
 }
 
-func TestStringToCString(t *testing.T) {
-	ptr, err := stringToCString("hello")
-	testutil.Equal(t, err, nil)
-	testutil.Equal(t, cStringToString(ptr), "hello")
+func TestCString(t *testing.T) {
+	testutil.Equal(t, goString(cString("hello")), "hello")
 
 	// 空字符串
-	ptr, err = stringToCString("")
-	testutil.Equal(t, err, nil)
-	testutil.Equal(t, cStringToString(ptr), "")
+	testutil.Equal(t, goString(cString("")), "")
 
 	// 非 ASCII
-	ptr, err = stringToCString("你好")
-	testutil.Equal(t, err, nil)
-	testutil.Equal(t, cStringToString(ptr), "你好")
+	testutil.Equal(t, goString(cString("你好")), "你好")
 }
 
-func TestCStringToString(t *testing.T) {
+func TestGoString(t *testing.T) {
 	// nil 指针返回空字符串，而不是 panic
-	testutil.Equal(t, cStringToString(nil), "")
+	testutil.Equal(t, goString(nil), "")
 
 	// 遇到 '\0' 即终止
 	b := []byte{'g', 'o', 0, 'x'}
-	testutil.Equal(t, cStringToString(&b[0]), "go")
+	testutil.Equal(t, goString(&b[0]), "go")
+
+	// 返回值必须是拷贝：源缓冲区之后会被 onnxruntime 释放或复用
+	s := goString(&b[0])
+	b[0] = 'G'
+	testutil.Equal(t, s, "go")
 }
 
 func TestShapeElementCount(t *testing.T) {
@@ -63,46 +61,4 @@ func TestShapeElementCount(t *testing.T) {
 			testutil.Equal(t, got, tc.want)
 		})
 	}
-}
-
-func TestParseInputData(t *testing.T) {
-	cases := []struct {
-		name     string
-		data     any
-		dataType TensorElementDataType
-		typeSize uintptr
-		length   int
-	}{
-		{"float32", []float32{1, 2}, TensorElementDataTypeFloat, 4, 2},
-		{"float64", []float64{1, 2}, TensorElementDataTypeDouble, 8, 2},
-		{"int64", []int64{1, 2}, TensorElementDataTypeInt64, 8, 2},
-		{"int32", []int32{1, 2}, TensorElementDataTypeInt32, 4, 2},
-		{"int16", []int16{1, 2}, TensorElementDataTypeInt16, 2, 2},
-		{"int8", []int8{1, 2}, TensorElementDataTypeInt8, 1, 2},
-		{"uint64", []uint64{1, 2}, TensorElementDataTypeUint64, 8, 2},
-		{"uint32", []uint32{1, 2}, TensorElementDataTypeUint32, 4, 2},
-		{"uint16", []uint16{1, 2}, TensorElementDataTypeUint16, 2, 2},
-		{"uint8", []uint8{1, 2}, TensorElementDataTypeUint8, 1, 2},
-		{"bool", []bool{true, false}, TensorElementDataTypeBool, 1, 2},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dataType, typeSize, length, dataPtr, err := parseInputData(tc.data)
-			testutil.Equal(t, err, nil)
-			testutil.Equal(t, dataType, tc.dataType)
-			testutil.Equal(t, typeSize, tc.typeSize)
-			testutil.Equal(t, length, tc.length)
-			testutil.NotEqual(t, dataPtr, nil)
-		})
-	}
-
-	t.Run("unsupported", func(t *testing.T) {
-		dataType, typeSize, length, dataPtr, err := parseInputData("abc")
-		testutil.NotEqual(t, err, nil)
-		testutil.Equal(t, dataType, TensorElementDataTypeUndefined)
-		testutil.Equal(t, typeSize, uintptr(0))
-		testutil.Equal(t, length, 0)
-		testutil.Equal(t, dataPtr, unsafe.Pointer(nil))
-	})
 }

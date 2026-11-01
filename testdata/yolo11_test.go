@@ -14,12 +14,12 @@ import (
 
 func TestYolo11Detect(t *testing.T) {
 	engine, _ := ort.NewEngine("." + ort.DefaultLibraryPath())
-	defer engine.Destroy()
+	defer engine.Close()
 	session, err := engine.NewSession("yolo11n.onnx", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer session.Destroy()
+	defer session.Close()
 
 	img, err := imageutil.Open("test.png")
 	if err != nil {
@@ -30,7 +30,7 @@ func TestYolo11Detect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer inputTensor.Destroy()
+	defer inputTensor.Close()
 	inputs := map[string]*ort.Value{
 		"images": inputTensor,
 	}
@@ -41,7 +41,7 @@ func TestYolo11Detect(t *testing.T) {
 	}
 	defer func() {
 		for _, output := range outputs {
-			output.Destroy()
+			output.Close()
 		}
 	}()
 
